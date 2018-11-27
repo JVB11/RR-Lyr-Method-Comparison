@@ -14,7 +14,7 @@ N_mc = 250 #MonteCarlo itteration
 
 #Files need to be named according to these presets
 StarNames = ['SVEri', 'XZDra', 'SWAnd', 'RUPsc', 'XAri', 'BD184995', 'RZCep', 'V1057Cas']
-index = 0 #choose element of above list
+index = 1 #choose element of above list
 
 
 #Read in data and model
@@ -26,36 +26,33 @@ t = Table.read( StarNames[index]+'.vot', format='votable')
 #Select data you don't want from vot-file (removing outliers)
 
 #SVEri 
-#- good fit for high wavelenght, trouble fitting peak.
 if index==0: 
 	t_reduced =t[(t['_tabname'] != 'I/239/tyc_main') & (t['_tabname'] != 'J/ApJS/203/32/table4') & (t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'II/336/apass9') & (t['_tabname'] != 'II/328/allwise') & (t['_tabname'] != 'II/311/wise') & (t['_tabname'] != 'J/MNRAS/463/4210/ucac4rpm') & (t['_tabname'] != 'J/AJ/151/59/table2') & (t['_tabname'] != 'I/331/apop') & (t['_tabname'] != 'I/327/cmc15')]
-#XZDra - gives sensible fit
+#XZDra
 if index==1: 
 	t_reduced =t[ (t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'II/271A/patch2')]
-#SWAnd - gives sensible fit
+#SWAnd
 if index==2: 
 	t_reduced =t[(t['_tabname'] != 'J/MNRAS/441/715/table1') & (t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'II/271A/patch2') &  (t['_tabname'] != 'II/336/apass9') & (t['_tabname'] != 'I/239/tyc_main') & (t['_tabname'] != 'II/311/wise') & (t['_tabname'] != 'I/331/apop') & (t['_tabname'] != 'II/328/allwise') & (t['_tabname'] != 'J/AJ/151/59/table2') & (t['_tabname'] != 'J/MNRAS/463/4210/ucac4rpm') & (t['_tabname'] != 'I/340/ucac5') & (t['_tabname'] != 'I/327/cmc15')]
-#RUPsc - It fits but the fit does seem a bit off and the E(B-V) is 10x smaller than expected, 0.05 instead of 0.5
+#RUPsc
 if index==3: 
 	t_reduced =t[ (t['_tabname'] != 'II/311/wise') & (t['_tabname'] != 'J/AJ/151/59/table2') & (t['_tabname'] != 'II/271A/patch2') & (t['_tabname'] != 'J/MNRAS/441/715/table1') & (t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'J/MNRAS/471/770/table2') & (t['_tabname'] != 'I/327/cmc15') & (t['_tabname'] != 'J/MNRAS/396/553/table') & (t['_tabname'] != 'J/MNRAS/435/3206/table2') & (t['_tabname'] != 'II/246/out')]
-#XAri - gives sensible fit
+#XAri
 if index==4: 
 	t_reduced =t[(t['_tabname'] != 'II/349/ps1' ) & (t['_tabname'] != 'II/311/wise' ) & (t['_tabname'] != 'II/328/allwise' ) & (t['_tabname'] != 'II/336/apass9')& (t['_tabname'] != 'J/MNRAS/463/4210/ucac4rpm')]
-#Bd184995 - Not enough data to obtain model
+#Bd184995
 if index==5: 
 	t_reduced =t[(t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'I/275/ac2002') & (t['_tabname'] != 'II/336/apass9') & (t['_tabname'] != 'II/311/wise') & (t['_tabname'] != 'II/328/allwise') & (t['_tabname'] != 'II/271A/patch2') & (t['_tabname'] != 'I/342/f3') & (t['_tabname'] != 'I/239/tyc_main') & (t['_tabname'] != 'I/331/apop') & (t['_tabname'] != 'J/MNRAS/471/770/table1')]
-#RZCep - It fits but the fit does seem a bit off and the E(B-V) is 10x smaller than expected, 0.09 instead of 0.9
+#RZCep
 if index==6: 
 	t_reduced =t[ (t['_tabname'] != 'J/MNRAS/441/715/table1') & (t['_tabname'] != 'II/349/ps1') & (t['_tabname'] != 'J/MNRAS/396/553/table') & (t['_tabname'] != 'J/MNRAS/435/3206/table2')]
-#V1057Cas - Not enough data to obtain model
+#V1057Cas
 if index==7:
     t_reduced =t
 #No reduction needed, all data is good (every datapoint is within 0.5arcsec and no large errorbars)
 
 
-t_reduced = t_reduced[(t_reduced['sed_flux'] > 0.0 ) & (t_reduced['sed_eflux'] >0.)]
-
-
+t_reduced = t_reduced[(t_reduced['sed_flux'] > 0.0 ) & (t_reduced['sed_eflux'] >0.0)]
 
 #t.write(StarNames[index]+'.csv', format='ascii', delimiter=',', overwrite= True) #to write the .vot file to csv for reading
 model_data = ascii.read(StarNames[index]+'Model.csv', format='csv')
@@ -242,7 +239,6 @@ print(e_A_K_def)
 #ChiMinplot=plt.gca()
 #ChiMinplot.scatter(E_BV_min, ChiSquare_min)
 
-plt.show()
 
 #Create datatypes to write data away
 Names = ['Mean(E(b-V))','sigma(E(b-V))','min(E(b-V))','A_V','eA_V','A_W','eA_W','A_K','eA_K']
@@ -252,3 +248,5 @@ import csv
 with open(StarNames[index]+'_output.csv', 'w') as f:
 	  writer = csv.writer(f, delimiter='\t')
 	  writer.writerows(zip(Names,Data))
+	  
+plt.show()
