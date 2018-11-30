@@ -39,7 +39,7 @@ ebv_max=1.0 # maximal E(B-V) value
 N_mc = 250 # Monte Carlo iteration
 
 # decide whether or not you want to create a csv table that might be retro-inspected
-table_read = False
+table_write = False
 
 # decide whether or not you want to create a raw data plot
 raw_data = False
@@ -98,7 +98,7 @@ fig=plt.figure()
 # plot the raw data in logscale, if True
 if raw_data:
     ax = plt.gca()
-    ax.scatter((3.*10**9)/t_reduced['sed_freq'],np.log10(t_reduced['sed_freq']*t_reduced['sed_flux']), marker='+', s = 40, c='r', label='Raw Data') #Raw data plot
+    ax.scatter((3.0*10**9)/t_reduced['sed_freq'],np.log10(t_reduced['sed_freq']*t_reduced['sed_flux']), marker='+', s = 40, c='r', label='Raw Data') #Raw data plot
     ax.set_xscale('log')
 
 #Scaling to the Johnson J filter of the model data
@@ -112,7 +112,7 @@ scaled_model = scale_factor*model_data['flux']
 
 # plot the scaled model in logscale
 bx = plt.gca()
-bx.plot(10.*model_data['wavelength'], np.log10((3*10**17/model_data['wavelength'])*scaled_model), linestyle='dashed' , c='green', label='Scaled Stellar Atmosphere Model') #Scaled model plot
+bx.plot(10.0*model_data['wavelength'], np.log10((3*10**17/model_data['wavelength'])*scaled_model), linestyle='dashed' , c='green', label='Scaled Stellar Atmosphere Model') #Scaled model plot
 bx.set_xscale('log')
 
 
@@ -120,7 +120,7 @@ bx.set_xscale('log')
 ########################################################################################################
 t_reduced_nodust = t_reduced[((3*10**9)/t_reduced['sed_freq'] < 30000)] # obtain wavelength regions not affected by dust flux
 
-Lambda = (3*10**9)/(t_reduced_nodust['sed_freq']) # convert to wavelength in Ångström, sed_freq is in GHz
+Lambda = (3*10**9)/(t_reduced_nodust['sed_freq']) # convert to wavelength in Angstrom, sed_freq is in GHz
 
 # read in the interstellar dereddening law (NEED REFERENCE), and use it to interpolate the R-factor
 Reddening = ascii.read('Reddening.csv', format = 'csv')
@@ -128,7 +128,7 @@ R_interp = np.interp(Lambda,Reddening['Wavelength'],Reddening['R'])
 
 # create the E(B-V) array
 E_BV = np.linspace(ebv_min,ebv_max,N_ebv) 		# iteration values of E(B-V)
-C = np.interp(Lambda,10.*model_data['wavelength'],scaled_model) # interpolate/calculate the model fluxes at the wavelengths of the photometric data
+C = np.interp(Lambda,10.0*model_data['wavelength'],scaled_model) # interpolate/calculate the model fluxes at the wavelengths of the photometric data
 
 
 # Monte-Carlo
