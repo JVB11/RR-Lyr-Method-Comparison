@@ -37,17 +37,18 @@ plt.close()
 N_ebv=1000 # nr. of intervals
 ebv_min=0.0001 # minimal E(B-V) value
 ebv_max=1.0 # maximal E(B-V) value
-N_mc = 250 # Monte Carlo iteration
+N_mc = 500 # Monte Carlo iteration
 
 # decide whether or not you want to create a csv table that might be retro-inspected
 table_write = False
-
 # decide whether or not you want to create a raw data plot
 raw_data = False
+# decide whether or not you want to create a chi^2 plot to check form
+Chi_Squared_Check = False
 
 # Files need to be named according to these presets
 StarNames = ['SVEri', 'XZDra', 'SWAnd', 'RUPsc', 'XAri', 'BD184995', 'RZCep', 'V1057Cas']
-index = 1 # choose element of above list: calculate reddening for this object
+index = 5 # choose element of above list: calculate reddening for this object
 
 
 #Read in data and model
@@ -135,32 +136,31 @@ C = np.interp(Lambda,10.0*model_data['wavelength'],scaled_model) # interpolate/c
 # Monte-Carlo
 ##########################
 sigmadata = np.std(t_reduced_nodust['sed_flux']) # obtain the errors on the fluxes
-E_BV_min = np.zeros(N_mc) # initialize an array containing the minimal E(B-V) values
-ChiSquare_min =  np.zeros(len(E_BV_min)) # initialize an array containing the minimal Chi-squared values
+E_BV_min = np.zeros(N_mc) # initialize an array for E(B-V) values
+ChiSquare_min =  np.zeros(len(E_BV_min)) # initialize an array for minimal Chi-squared values
 
-for j in range(N_mc): # loop over all E(B-V) values
-	if j%25 == 0:
-		print(j)
-	ChiSquare = np.zeros(len(E_BV))
-	t_reduced_flux = t_reduced_nodust['sed_flux']
-	t_reduced_nodust_new = []
-	for k in range(len(t_reduced_flux)): # every value of the flux gets shifted by a random value (taken from a normal error distribution)
-		t_reduced_nodust_new.append(t_reduced_flux[k] + np.random.normal(0,sigmadata)*sigmadata)
+for j in range(N_mc):
+		if j%25 == 0:
+				print(j)
+		ChiSquare = np.zeros(len(E_BV))
+		t_reduced_flux = t_reduced_nodust['sed_flux']
+		t_reduced_nodust_new = []
+		for k in range(len(t_reduced_flux)): # every value of the flux gets shifted by a random value (taken from a normal error distribution)
+				t_reduced_nodust_new.append(t_reduced_flux[k] + np.random.normal(0,sigmadata)*sigmadata)
 
-	for i in range(len(E_BV)):
-		A_lambda = R_interp*E_BV[i]	# coefficient used to deredden
-		F = 10**(A_lambda/2.5)*np.array(t_reduced_nodust_new) # Dereddened flux in Jy
-        F_error = 10**(A_lambda/2.5)*np.array(t_reduced_nodust['sed_eflux']) # error on the Dereddened flux in Jy
-            ChiSquare[i] = sum(((F-C)/F_error)**2)/(len(F)-1) # Chi-squared value
-		
+		for i in range(len(E_BV)):
+				A_lambda = R_interp*E_BV[i]	# coefficient used to deredden
+				F = 10**(A_lambda/2.5)*np.array(t_reduced_nodust_new) # Dereddened flux in Jy
+				F_error = 10**(A_lambda/2.5)*np.array(t_reduced_nodust['sed_eflux']) # error on the Dereddened flux in Jy
+				ChiSquare[i] = sum(((F-C)/F_error)**2)/(len(F)-1) # Chi-squared value
 
-    ChiSquare_min[j]=np.argmin(ChiSquare) # obtain minimal Chi-squared value
-    E_BV_min[j] = E_BV[np.argmin(ChiSquare)] # obtain minimal E(B-V) value
+		ChiSquare_min[j]=np.argmin(ChiSquare) # obtain minimal Chi-squared value
+		E_BV_min[j] = E_BV[np.argmin(ChiSquare)] # obtain minimal E(B-V) value
 	
 # calculate mean, minimum, and standard deviation of the minimal E(B-V) distribution (assuming a normal distribution)
-mean_E_BV_min = np.mean(E_BV_min)
-sigma_E_BV_min = np.std(E_BV_min)
-min_E_BV_min = min(E_BV_min)
+mean_E_BV_min = np.average(E_BV_min[ChiSquare_min>0.0], weights=1/ChiSquare_min[ChiSquare_min>0.0])
+sigma_E_BV_min = np.std(E_BV_min[ChiSquare_min>0.0])
+min_E_BV_min = min(E_BV_min[ChiSquare_min>0.0])
 
 print(' ' )
 print('Mean(E_BV_min)  ')
@@ -243,9 +243,9 @@ A_lambda_sorted = R_interp_sorted*mean_E_BV_min
 A_lambda_err = R_interp_sorted*sigma_E_BV_min
 
 # 3 calculations below are to check whether definitions are right (they are)
-#A_V = np.interp(5510, Lambda_total_sorted, A_lambda_sorted) # Lambda_total is in angstrom
-#A_W = np.interp(33200, Lambda_total_sorted, A_lambda_sorted)
-#A_K = np.interp(21600, Lambda_total_sorted, A_lambda_sorted)
+A_V = np.interp(5510, Lambda_total_sorted, A_lambda_sorted) # Lambda_total is in angstrom
+A_W = np.interp(33200, Lambda_total_sorted, A_lambda_sorted)
+A_K = np.interp(21600, Lambda_total_sorted, A_lambda_sorted)
 
 # use definitions in order to obtain error on A for the different passband wavelengths
 A_V_def,e_A_V_def = use_nearest_interp_error(5510,Lambda_total_sorted,A_lambda_sorted,A_lambda_err) 
@@ -294,8 +294,8 @@ if Chi_Squared_Check:
 
 
 # Create datatypes to write data to csv file (readable in main script)
-Names = ['Mean(E(b-V))','sigma(E(b-V))','min(E(b-V))','A_V','eA_V','A_W','eA_W','A_K','eA_K']
-Data = [mean_E_BV_min, sigma_E_BV_min, min_E_BV_min, A_V_def, e_A_V_def, A_W_def, e_A_W_def, A_K_def, e_A_K_def,]
+Names = ['mean(ChiSquare_min)','Mean(E(b-V))','sigma(E(b-V))','min(E(b-V))','A_V','eA_V','A_W','eA_W','A_K','eA_K']
+Data = [np.mean(ChiSquare_min),mean_E_BV_min, sigma_E_BV_min, min_E_BV_min, A_V_def, e_A_V_def, A_W_def, e_A_W_def, A_K_def, e_A_K_def,]
 
 # Create csv file (readable in main script)
 import csv
