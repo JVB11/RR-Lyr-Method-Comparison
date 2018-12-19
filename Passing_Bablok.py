@@ -6,11 +6,18 @@
 
 # Description: Module that implements the Passing Bablok regression 
 # for the statistical comparison of the agreement of two methods.
+
 # For more information on the method, see:
 # Passing, H. & Bablok, W. (2009). A New Biometrical Procedure for Testing the Equality of Measurements 
 # from Two Different Analytical Methods. Application of linear regression procedures for method comparison studies 
 # in Clinical Chemistry, Part I. Clinical Chemistry and Laboratory Medicine, 21(11), pp. 709-720. 
-# doi:10.1515/cclm.1983.21.11.709
+# doi:10.1515/cclm.1983.21.11.70
+
+# For more information on the bootstrap method, see:
+# Carpenter, James and Bithell, John (2000). Bootstrap confidence intervals: 
+# when, which, what? A practical guide for medical statisticians.
+# in Statistics in Medicine, 19(9), pp. 1141-1164.
+# doi:10.1002/(SICI)1097-0258(20000515)19:9<1141::AID-SIM479>3.0.CO;2-F
 
 #   Copyright 2018 Jordan Van Beeck
 
@@ -62,91 +69,323 @@ def convert_uncert_df_to_nom_err(df):
     err = pd.DataFrame(err_list,index=list(df.index),columns=list(df))
     return nom,err
 
-def Passing_Bablok_Regression_Ref(df):
+def Passing_Bablok_Regression_Ref(df,our_script,outfile):
+    methods = list(df.index)
+    if any("Sesar" in s for s in methods): # check whether Sesar script is used: if so, only look at RRab variables
+        df = df.T[df.T["RRAB/RRC"]=="RRAB"].T
     df_copy = df.copy()
-    df_copy = df_copy.drop(['RRAB/RRC','Blazhko/RRLyr'])
+    df_copy = df_copy.drop(['RRAB/RRC','Blazhko/RRLyr'])    
+    # obtain parallax values and corresponding errors
     nom_plx,err_plx = convert_uncert_df_to_nom_err(df_copy)
-    if len(nom_plx) > 4:
-        methodlist1 = list(df_copy.index)[0:3] # first method
-        methodlist2 = list(df_copy.index)[3:6] # second method to be compared against
-        for i in range(len(methodlist1)):
-            methodstring1 = methodlist1[i]
-            methodstring2 = methodlist2[i]
-            Compare = nom_plx.loc[methodstring1].values # parallaxes obtained by first method
-            eCompare = err_plx.loc[methodstring1].values # errors
-            Ref = nom_plx.loc[methodstring2].values # parallaxes obtained by second method
-            # obtain the slopes
-            slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
-            # obtain the biased estimator of beta: 'b'
-            b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
-            # obtain the estimate of alpha: 'a'
-            a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
-            # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
-            sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
-            # Sort colours, in order to make RRLyr/Blazhko differentiation
-            sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
-            # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
-            x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
-            y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+    if our_script:
+        if len(nom_plx) > 4:
+            methodlist1 = list(df_copy.index)[0:3] # first method
+            methodlist2 = list(df_copy.index)[3:6] # second method to be compared against
+            for i in range(len(methodlist1)):
+                methodstring1 = methodlist1[i]
+                methodstring2 = methodlist2[i]
+                Compare = nom_plx.loc[methodstring1].values # parallaxes obtained by first method
+                eCompare = err_plx.loc[methodstring1].values # errors
+                Ref = nom_plx.loc[methodstring2].values # parallaxes obtained by second method
+                # gathering non-extremal sample (see Tukey_Bland_Altman_Krouwer.py)
+                differences = Ref - Compare
+                non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                non_extremal_Ref = Ref[non_extremal_indices]
+                non_extremal_Compare = Compare[non_extremal_indices]
+                non_extremal_eCompare = eCompare[non_extremal_indices] 
+                # obtain the slopes
+                slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
+                non_extremal_slopes,non_extremal_sortedindices,non_extremal_sortedslopes,non_extremal_N = Slopes(non_extremal_Compare,non_extremal_Ref)
+                # obtain the biased estimator of beta: 'b'
+                b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
+                non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta = estimate_beta(non_extremal_sortedslopes,non_extremal_Compare,non_extremal_N)
+                # obtain the estimate of alpha: 'a'
+                a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
+                non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high = estimate_alpha(non_extremal_Compare,non_extremal_Ref,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_b)
+                # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
+                sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
+                non_extremal_sorted_distancematrix,non_extremal_sorted_scorematrix,non_extremal_fittedvalues,non_extremal_higher,non_extremal_lower,non_extremal_plx_indices = linearity_check_matrices(non_extremal_a,non_extremal_b,non_extremal_Compare,non_extremal_Ref)
+                # Sort colours, in order to make RRLyr/Blazhko differentiation
+                sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
+                non_extremal_sorted_colours = df.T.iloc[non_extremal_indices].T.loc["Blazhko/RRLyr"].values[non_extremal_plx_indices]
+                # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
+                x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
+                y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                non_extremal_x = range(1,len(non_extremal_sorted_distancematrix)+1) # ranks of the distance matrix
+                non_extremal_y = np.cumsum(non_extremal_sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
 
-            # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
-            low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)    
-            # Bootstrapping the confidence interval of fit:
-            bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
-            bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
-            Q = calculate_Q(B,bias)
-            interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
+                low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)
+                non_extremal_low_bounds,non_extremal_high_bounds = estimate_regression_confidence(non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high,non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_Compare,non_extremal_eCompare,non_extremal_fittedvalues)
+                # Bootstrapping the confidence interval of fit:
+                bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
+                bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
+                Q = calculate_Q(B,bias)
+                interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                non_extremal_bootstraps,non_extremal_B = semi_param_resampling(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b)
+                non_extremal_bias = calculate_bias(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_bootstraps,non_extremal_B)
+                non_extremal_Q = calculate_Q(non_extremal_B,non_extremal_bias)
+                non_extremal_interval_bootstrap, non_extremal_neginterval_bootstrap = estimate_interval_pos(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_Q,non_extremal_B,non_extremal_bootstraps,interpolatedQ) # set interpolatedQ above
 
-            # plot the first Passing-Bablok plot: comparison with identity line:
-            plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring1,interval_bootstrap,neginterval_bootstrap,methodstring2=methodstring2)
-            # plot the cusum statistic plots, assessing linearity:
-            plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
-            plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
-            
-            # Plot the regression residual plot, in terms of the rank
-            plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring1,methodstring2=methodstring2)             
-            
+                # plot the first Passing-Bablok plot: comparison with identity line:
+                plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring1,interval_bootstrap,neginterval_bootstrap,methodstring2=methodstring2)
+                plot_comparison_identity(non_extremal_Compare,non_extremal_fittedvalues,non_extremal_low_bounds,non_extremal_high_bounds,methodstring1,non_extremal_interval_bootstrap,non_extremal_neginterval_bootstrap,methodstring2=methodstring2,nonextremal=True)
+
+                # plot the cusum statistic plots, assessing linearity:
+                plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_cusum_statistic(True,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
+                plot_cusum_statistic(False,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
+                
+                # Plot the regression residual plot, in terms of the rank
+                plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_regression_residuals(non_extremal_x,non_extremal_Ref,non_extremal_fittedvalues,non_extremal_plx_indices,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
+        
+        else:
+            Ref = nom_plx.loc["GAIA"].values # parallaxes obtained by GAIA method
+            # eRef = err_plx.loc["GAIA"].values # errors
+            # list the different dereddening methods
+            methodlist = list(df_copy.index)[0:3]
+
+            for i in range(len(methodlist)):
+                methodstring = methodlist[i]
+                Compare = nom_plx.loc[methodstring].values # parallaxes obtained by method to be compared
+                eCompare = err_plx.loc[methodstring].values # errors
+                # gathering non-extremal sample (see Tukey_Bland_Altman_Krouwer.py)
+                differences = Ref - Compare
+                non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                non_extremal_Ref = Ref[non_extremal_indices]
+                non_extremal_Compare = Compare[non_extremal_indices]
+                non_extremal_eCompare = eCompare[non_extremal_indices] 
+                # obtain the slopes
+                slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
+                non_extremal_slopes,non_extremal_sortedindices,non_extremal_sortedslopes,non_extremal_N = Slopes(non_extremal_Compare,non_extremal_Ref)
+                # obtain the biased estimator of beta: 'b'
+                b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
+                non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta = estimate_beta(non_extremal_sortedslopes,non_extremal_Compare,non_extremal_N)
+                # obtain the estimate of alpha: 'a'
+                a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
+                non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high = estimate_alpha(non_extremal_Compare,non_extremal_Ref,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_b)
+                # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
+                sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
+                non_extremal_sorted_distancematrix,non_extremal_sorted_scorematrix,non_extremal_fittedvalues,non_extremal_higher,non_extremal_lower,non_extremal_plx_indices = linearity_check_matrices(non_extremal_a,non_extremal_b,non_extremal_Compare,non_extremal_Ref)
+                # Sort colours, in order to make RRLyr/Blazhko differentiation
+                sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
+                non_extremal_sorted_colours = df.T.iloc[non_extremal_indices].T.loc["Blazhko/RRLyr"].values[non_extremal_plx_indices]
+                # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
+                x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
+                y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                non_extremal_x = range(1,len(non_extremal_sorted_distancematrix)+1) # ranks of the distance matrix
+                non_extremal_y = np.cumsum(non_extremal_sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+        
+                # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
+                low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)
+                non_extremal_low_bounds,non_extremal_high_bounds = estimate_regression_confidence(non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high,non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_Compare,non_extremal_eCompare,non_extremal_fittedvalues)
+                # Bootstrapping the confidence interval of fit:
+                bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
+                bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
+                Q = calculate_Q(B,bias)
+                interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                non_extremal_bootstraps,non_extremal_B = semi_param_resampling(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b)
+                non_extremal_bias = calculate_bias(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_bootstraps,non_extremal_B)
+                non_extremal_Q = calculate_Q(non_extremal_B,non_extremal_bias)
+                non_extremal_interval_bootstrap, non_extremal_neginterval_bootstrap = estimate_interval_pos(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_Q,non_extremal_B,non_extremal_bootstraps,interpolatedQ) # set interpolatedQ above
+        
+                # plot the first Passing-Bablok plot: comparison with identity line:
+                plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring,interval_bootstrap,neginterval_bootstrap)
+                plot_comparison_identity(non_extremal_Compare,non_extremal_fittedvalues,non_extremal_low_bounds,non_extremal_high_bounds,methodstring,non_extremal_interval_bootstrap,non_extremal_neginterval_bootstrap,nonextremal=True)
+                # plot the cusum statistic plots, assessing linearity:
+                plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring)
+                plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring)
+                plot_cusum_statistic(True,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring,nonextremal=True)
+                plot_cusum_statistic(False,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring,nonextremal=True)
+                
+                # Plot the regression residual plot, in terms of the rank
+                plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring)
+                plot_regression_residuals(non_extremal_x,non_extremal_Ref,non_extremal_fittedvalues,non_extremal_plx_indices,non_extremal_sorted_colours,methodstring,nonextremal=True)
+
     else:
-        Ref = nom_plx.loc["GAIA"].values # parallaxes obtained by GAIA method
-        # eRef = err_plx.loc["GAIA"].values # errors
-        # list the different dereddening methods
-        methodlist = list(df_copy.index)[0:3]
+        if len(nom_plx) > 3:
+            methodlist1 = list(df_copy.index)[0:2] # first method
+            methodlist2 = list(df_copy.index)[2:4] # second method to be compared against
+            for i in range(len(methodlist1)):
+                methodstring1 = methodlist1[i]
+                methodstring2 = methodlist2[i]
+                Compare = nom_plx.loc[methodstring1].values # parallaxes obtained by first method
+                eCompare = err_plx.loc[methodstring1].values # errors
+                Ref = nom_plx.loc[methodstring2].values # parallaxes obtained by second method
+                # gathering non-extremal sample (see Tukey_Bland_Altman_Krouwer.py)
+                differences = Ref - Compare
+                non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                non_extremal_Ref = Ref[non_extremal_indices]
+                non_extremal_Compare = Compare[non_extremal_indices]
+                non_extremal_eCompare = eCompare[non_extremal_indices] 
+                # obtain the slopes
+                slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
+                non_extremal_slopes,non_extremal_sortedindices,non_extremal_sortedslopes,non_extremal_N = Slopes(non_extremal_Compare,non_extremal_Ref)
+                # obtain the biased estimator of beta: 'b'
+                b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
+                non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta = estimate_beta(non_extremal_sortedslopes,non_extremal_Compare,non_extremal_N)
+                # obtain the estimate of alpha: 'a'
+                a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
+                non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high = estimate_alpha(non_extremal_Compare,non_extremal_Ref,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_b)
+                # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
+                sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
+                non_extremal_sorted_distancematrix,non_extremal_sorted_scorematrix,non_extremal_fittedvalues,non_extremal_higher,non_extremal_lower,non_extremal_plx_indices = linearity_check_matrices(non_extremal_a,non_extremal_b,non_extremal_Compare,non_extremal_Ref)
+                # Sort colours, in order to make RRLyr/Blazhko differentiation
+                sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
+                non_extremal_sorted_colours = df.T.iloc[non_extremal_indices].T.loc["Blazhko/RRLyr"].values[non_extremal_plx_indices]
+                # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
+                x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
+                y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                non_extremal_x = range(1,len(non_extremal_sorted_distancematrix)+1) # ranks of the distance matrix
+                non_extremal_y = np.cumsum(non_extremal_sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                
+                # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
+                low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)
+                non_extremal_low_bounds,non_extremal_high_bounds = estimate_regression_confidence(non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high,non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_Compare,non_extremal_eCompare,non_extremal_fittedvalues)
+                # Bootstrapping the confidence interval of fit:
+                bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
+                bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
+                Q = calculate_Q(B,bias)
+                interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                non_extremal_bootstraps,non_extremal_B = semi_param_resampling(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b)
+                non_extremal_bias = calculate_bias(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_bootstraps,non_extremal_B)
+                non_extremal_Q = calculate_Q(non_extremal_B,non_extremal_bias)
+                non_extremal_interval_bootstrap, non_extremal_neginterval_bootstrap = estimate_interval_pos(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_Q,non_extremal_B,non_extremal_bootstraps,interpolatedQ) # set interpolatedQ above
+                
+                # plot the first Passing-Bablok plot: comparison with identity line:
+                plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring1,interval_bootstrap,neginterval_bootstrap,methodstring2=methodstring2)
+                plot_comparison_identity(non_extremal_Compare,non_extremal_fittedvalues,non_extremal_low_bounds,non_extremal_high_bounds,methodstring1,non_extremal_interval_bootstrap,non_extremal_neginterval_bootstrap,methodstring2=methodstring2,nonextremal=True)
 
-        for i in range(len(methodlist)):
-            methodstring = methodlist[i]
-            Compare = nom_plx.loc[methodstring].values # parallaxes obtained by method to be compared
-            eCompare = err_plx.loc[methodstring].values # errors
-            # obtain the slopes
-            slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
-            # obtain the biased estimator of beta: 'b'
-            b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
-            # obtain the estimate of alpha: 'a'
-            a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
-            # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
-            sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
-            # Sort colours, in order to make RRLyr/Blazhko differentiation
-            sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
-            # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
-            x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
-            y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                # plot the cusum statistic plots, assessing linearity:
+                plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_cusum_statistic(True,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
+                plot_cusum_statistic(False,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
+                
+                # Plot the regression residual plot, in terms of the rank
+                plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring1,methodstring2=methodstring2)
+                plot_regression_residuals(non_extremal_x,non_extremal_Ref,non_extremal_fittedvalues,non_extremal_plx_indices,non_extremal_sorted_colours,methodstring1,methodstring2=methodstring2,nonextremal=True)
     
-            # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
-            low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)    
-            # Bootstrapping the confidence interval of fit:
-            bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
-            bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
-            Q = calculate_Q(B,bias)
-            interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
-    
-            # plot the first Passing-Bablok plot: comparison with identity line:
-            plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring,interval_bootstrap,neginterval_bootstrap)
-            # plot the cusum statistic plots, assessing linearity:
-            plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring)
-            plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring)
+        else:
+            Ref = nom_plx.loc["GAIA"].values # parallaxes obtained by GAIA method            
+            # eRef = err_plx.loc["GAIA"].values # errors
+            # list the different dereddening methods
+            methodlist = list(df_copy.index)[0:2]
             
-            # Plot the regression residual plot, in terms of the rank
-            plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring)
+            for i in range(len(methodlist)):
+                methodstring = methodlist[i]
+                Compare = nom_plx.loc[methodstring].values # parallaxes obtained by method to be compared
+                eCompare = err_plx.loc[methodstring].values # errors                
+                # gathering non-extremal sample (see Tukey_Bland_Altman_Krouwer.py)
+                differences = Ref - Compare
+                non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                non_extremal_Ref = Ref[non_extremal_indices]
+                non_extremal_Compare = Compare[non_extremal_indices]
+                non_extremal_eCompare = eCompare[non_extremal_indices]                
+                # obtain the slopes
+                slopes,sortedindices,sortedslopes,N = Slopes(Compare,Ref)
+                non_extremal_slopes,non_extremal_sortedindices,non_extremal_sortedslopes,non_extremal_N = Slopes(non_extremal_Compare,non_extremal_Ref)
+                # obtain the biased estimator of beta: 'b'
+                b,Conf_bound_lower_beta,Conf_bound_higher_beta = estimate_beta(sortedslopes,Compare,N)
+                non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta = estimate_beta(non_extremal_sortedslopes,non_extremal_Compare,non_extremal_N)
+                # obtain the estimate of alpha: 'a'
+                a,a_conf_low,a_conf_high = estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b)
+                non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high = estimate_alpha(non_extremal_Compare,non_extremal_Ref,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_b)
+                # Linearity check matrices: score and distance matrix, sorted; also obtain the fitted values
+                sorted_distancematrix,sorted_scorematrix,fittedvalues,higher,lower,plx_indices = linearity_check_matrices(a,b,Compare,Ref)
+                non_extremal_sorted_distancematrix,non_extremal_sorted_scorematrix,non_extremal_fittedvalues,non_extremal_higher,non_extremal_lower,non_extremal_plx_indices = linearity_check_matrices(non_extremal_a,non_extremal_b,non_extremal_Compare,non_extremal_Ref)
+                # Sort colours, in order to make RRLyr/Blazhko differentiation
+                sorted_colours = df.loc["Blazhko/RRLyr"].values[plx_indices]
+                non_extremal_sorted_colours = df.T.iloc[non_extremal_indices].T.loc["Blazhko/RRLyr"].values[non_extremal_plx_indices]
+                # calculating needed inputs for the plots assessing linearity --> ranks of distance matrix and the cusum statistic
+                x = range(1,len(sorted_distancematrix)+1) # ranks of the distance matrix
+                y = np.cumsum(sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                non_extremal_x = range(1,len(non_extremal_sorted_distancematrix)+1) # ranks of the distance matrix
+                non_extremal_y = np.cumsum(non_extremal_sorted_scorematrix) # cumulative sum of the scores, needed for the cusum statistic
+                
+                # estimate regression bounds by error propagation --> CRUDE APPROXIMATION
+                low_bounds,high_bounds = estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,Compare,eCompare,fittedvalues)
+                non_extremal_low_bounds,non_extremal_high_bounds = estimate_regression_confidence(non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high,non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,non_extremal_Compare,non_extremal_eCompare,non_extremal_fittedvalues)
+                # Bootstrapping the confidence interval of fit:
+                bootstraps,B = semi_param_resampling(Ref,Compare,a,b)
+                bias = calculate_bias(Ref,Compare,a,b,bootstraps,B)
+                Q = calculate_Q(B,bias)
+                interval_bootstrap, neginterval_bootstrap = estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ) # set interpolatedQ above
+                non_extremal_bootstraps,non_extremal_B = semi_param_resampling(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b)
+                non_extremal_bias = calculate_bias(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_bootstraps,non_extremal_B)
+                non_extremal_Q = calculate_Q(non_extremal_B,non_extremal_bias)
+                non_extremal_interval_bootstrap, non_extremal_neginterval_bootstrap = estimate_interval_pos(non_extremal_Ref,non_extremal_Compare,non_extremal_a,non_extremal_b,non_extremal_Q,non_extremal_B,non_extremal_bootstraps,interpolatedQ) # set interpolatedQ above
+              
+                # plot the first Passing-Bablok plot: comparison with identity line:
+                plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring,interval_bootstrap,neginterval_bootstrap)
+                plot_comparison_identity(non_extremal_Compare,non_extremal_fittedvalues,non_extremal_low_bounds,non_extremal_high_bounds,methodstring,non_extremal_interval_bootstrap,non_extremal_neginterval_bootstrap,nonextremal=True)
+                # plot the cusum statistic plots, assessing linearity:
+                plot_cusum_statistic(True,x,y,higher,lower,sorted_colours,methodstring)
+                plot_cusum_statistic(False,x,y,higher,lower,sorted_colours,methodstring)
+                plot_cusum_statistic(True,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring,nonextremal=True)
+                plot_cusum_statistic(False,non_extremal_x,non_extremal_y,non_extremal_higher,non_extremal_lower,non_extremal_sorted_colours,methodstring,nonextremal=True)
+                
+                # Plot the regression residual plot, in terms of the rank
+                plot_regression_residuals(x,Ref,fittedvalues,plx_indices,sorted_colours,methodstring)
+                plot_regression_residuals(non_extremal_x,non_extremal_Ref,non_extremal_fittedvalues,non_extremal_plx_indices,non_extremal_sorted_colours,methodstring,nonextremal=True)
+                with open(outfile, 'w') as f:
+                    print_write_output(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,f,methodstring)
+                    print_write_output(non_extremal_a,non_extremal_a_conf_low,non_extremal_a_conf_high,non_extremal_b,non_extremal_Conf_bound_lower_beta,non_extremal_Conf_bound_higher_beta,f,methodstring,nonextremal=True)
     return 
+
+def print_write_output(a,a_conf_low,a_conf_high,b,Conf_bound_lower_beta,Conf_bound_higher_beta,outfile,method1,method2=False,nonextremal=False):
+    if isinstance(method2, basestring):
+        whatisfitted =  method2 + " parallax" + " vs. " + method1 + " parallax"
+    else:
+        whatisfitted = 'GAIA parallax' + " vs. " + method1 + " parallax"
+    if sys.version_info[0] < 3: # if python 2
+        print >> outfile, "-----------------------------------------------------"
+        print >> outfile, " "
+        print >> outfile, " "
+        if nonextremal:
+            print >> outfile, "Estimated alpha and beta for Passing Bablok Regression (non-extremal;" + whatisfitted + "):" 
+        else:
+            print >> outfile, "Estimated alpha and beta for Passing Bablok Regression (" + whatisfitted + "):"
+        print >> outfile, " "
+        print >> outfile, " "
+        print >> outfile, " estimated parameter: value (+) upper confidence bound (-) lower confidence bound "
+        print >> outfile, " "
+        print >> outfile, " "
+        if nonextremal:
+            print >> outfile, " alpha (non-extremal): " + str(a) + " (+) " + str(a_conf_high - a) + " (-) " + str(a - a_conf_low)
+            print >> outfile, " beta (non-extremal): " + str(b) + " (+) " + str(Conf_bound_higher_beta - b) + " (-) " + str(b - Conf_bound_lower_beta)
+        else:
+            print >> outfile, " alpha: " + str(a) + " (+) " + str(a_conf_high - a) + " (-) " + str(a - a_conf_low)
+            print >> outfile, " beta: " + str(b) + " (+) " + str(Conf_bound_higher_beta - b) + " (-) " + str(b - Conf_bound_lower_beta)
+        print >> outfile, " "
+        print >> outfile, " "
+        print >> outfile, "-----------------------------------------------------"
+    else: # python 3
+        print("-----------------------------------------------------")
+        print( " ")
+        print(" ")
+        if nonextremal:
+            print("Estimated alpha and beta for Passing Bablok Regression (non-extremal; " + whatisfitted + "):" )
+        else:
+            print("Estimated alpha and beta for Passing Bablok Regression (" + whatisfitted + "):")
+        print(" ")
+        print(" ")
+        print(" estimated parameter: value (+) upper confidence bound (-) lower confidence bound ")
+        print(" ")
+        print(" ")
+        if nonextremal:
+            print(" alpha (non-extremal): " + str(a) + " (+) " + str(a_conf_high - a) + " (-) " + str(a - a_conf_low))
+            print(" beta (non-extremal): " + str(b) + " (+) " + str(Conf_bound_higher_beta - b) + " (-) " + str(b - Conf_bound_lower_beta))
+        else:
+            print(" alpha: " + str(a) + " (+) " + str(a_conf_high - a) + " (-) " + str(a - a_conf_low))
+            print(" beta: " + str(b) + " (+) " + str(Conf_bound_higher_beta - b) + " (-) " + str(b - Conf_bound_lower_beta))
+        print(" ")
+        print(" ")
+        print("-----------------------------------------------------" )
+    return
 
 def Slopes(X,Y): # Slope function needed for Theil's/Passing-Bablok procedure. 
     # --> calculating slopes using the unique pairs (x_i,y_j) where 1 <= i < j <= n
@@ -191,7 +430,7 @@ def estimate_alpha(Compare,Ref,Conf_bound_lower_beta,Conf_bound_higher_beta,b):
     # estimate a for all stars
     a_estimators = [Ref[j]-(b*com) for j,com in enumerate(Compare)]
     a_conf_low_estimators = [Ref[j]-(Conf_bound_higher_beta*com) for j,com in enumerate(Compare)]
-    a_conf_high_estimators = [Ref[j]-(Conf_bound_higher_beta*com) for j,com in enumerate(Compare)]
+    a_conf_high_estimators = [Ref[j]-(Conf_bound_lower_beta*com) for j,com in enumerate(Compare)]
     # obtain the median values
     a = np.median(np.array(a_estimators))
     a_conf_low = np.median(np.array(a_conf_low_estimators))
@@ -237,7 +476,7 @@ def estimate_regression_confidence(a,a_conf_low,a_conf_high,b,Conf_bound_lower_b
     high_bounds = fittedvalues + high_bounds_sd
     return low_bounds,high_bounds
 
-def plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring,interval_bootstrap,neginterval_bootstrap,methodstring2=False):
+def plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methodstring,interval_bootstrap,neginterval_bootstrap,methodstring2=False,nonextremal=False):
     sns.set_style('darkgrid')
     # obtain indices needed in order to properly display line plots!
     fittedsortindices = np.argsort(Compare)
@@ -253,21 +492,28 @@ def plot_comparison_identity(Compare,fittedvalues,low_bounds,high_bounds,methods
     plt.xlabel(methodstring + ' ' + r'$\varpi$')
     if not methodstring2:
         plt.ylabel('Gaia ' + r'$\varpi$')
-        plt.title('Fitted Gaia ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')
+        if nonextremal:
+            plt.title('Fitted Gaia ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' + ' (non-extremal)')
+        else:
+            plt.title('Fitted Gaia ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')
     else:
         plt.ylabel(methodstring2 + ' ' + r'$\varpi$')
-        plt.title('Fitted '+ methodstring2+ ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')        
+        if nonextremal:
+            plt.title('Fitted '+ methodstring2+ ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$'+ ' (non-extremal)')        
+        else:
+            plt.title('Fitted '+ methodstring2+ ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')        
     Legend = plt.legend(frameon=True, fancybox=True, framealpha=1.0)
     frame = Legend.get_frame()
     frame.set_facecolor('White')
     return
 
-def plot_cusum_statistic(absolute,x,y,higher,lower,sorted_colours,methodstring,methodstring2=False):
-    # first plot of the cusum statistic, which should be moderate in order to indicate linearity.
+def plot_cusum_statistic(absolute,x,y,higher,lower,sorted_colours,methodstring,methodstring2=False,nonextremal=False):
+    # plot of the cusum statistic, which should be moderate in order to indicate linearity.
+    markersize = 8 # change markersize
     if absolute:
         # absolute value of cusum statistic, with 99% (red), 95% (orange), and 90% (black) confidence intervals
         plt.figure()
-        plt.scatter(x,np.absolute(y),label='|Cusum(i)|',color=[ color_dict[u] for u in sorted_colours])
+        plt.scatter(x,np.absolute(y),label='|Cusum(i)|',color=[ color_dict[u] for u in sorted_colours],s=markersize)
         ax = plt.gca()
         first_legend = plt.legend(handles=patchList, loc=2, frameon=True, fancybox=True, framealpha=1.0)
         first_frame = first_legend.get_frame()
@@ -275,21 +521,27 @@ def plot_cusum_statistic(absolute,x,y,higher,lower,sorted_colours,methodstring,m
         ax.add_artist(first_legend)
         ax.axhline(y = 0. ,c='k', ls='--')
         ax.axhline(y = 1.63 * np.sqrt(higher+lower),label='99%',c='red')
-        ax.axhline(y = 1.36 * np.sqrt(higher+lower),label='95%',c='orange')
+        ax.axhline(y = 1.36 * np.sqrt(higher+lower),label='95%',c='yellow')
         ax.axhline(y = 1.22 * np.sqrt(higher+lower),label='90%',c='k')
         plt.xlabel('Rank i')
         plt.ylabel('|Cusum(i)|')
         if not methodstring2:
-            plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
+            if nonextremal:
+                plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' + ' (non-extremal)')
+            else:
+                plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
         else:
-            plt.title('Cusum statistic for P-B regression of ' + methodstring + ' ' + r'$\varpi$' + ' vs ' + methodstring2 + ' ' + r'$\varpi$')
+            if nonextremal:
+                plt.title('Cusum statistic for P-B regression of ' + methodstring + ' ' + r'$\varpi$' + ' vs ' + methodstring2 + ' ' + r'$\varpi$'+ ' (non-extremal)')
+            else:
+                plt.title('Cusum statistic for P-B regression of ' + methodstring + ' ' + r'$\varpi$' + ' vs ' + methodstring2 + ' ' + r'$\varpi$')
         Legend = plt.legend(loc=1, frameon=True, fancybox=True, framealpha=1.0)
         frame = Legend.get_frame()
         frame.set_facecolor('White')
     else:
         # true value of cusum statistic, with 99% (red), 95% (orange), and 90% (black) confidence intervals
         plt.figure()
-        plt.scatter(x,y,label='Cusum(i)',color=[ color_dict[u] for u in sorted_colours])
+        plt.scatter(x,y,label='Cusum(i)',color=[ color_dict[u] for u in sorted_colours],s=markersize)
         axe = plt.gca()
         second_legend = plt.legend(handles=patchList, loc=2, frameon=True, fancybox=True, framealpha=1.0)
         second_frame = second_legend.get_frame()
@@ -297,23 +549,29 @@ def plot_cusum_statistic(absolute,x,y,higher,lower,sorted_colours,methodstring,m
         axe.add_artist(second_legend)
         axe.axhline(y = 0. ,c='k', ls='--')
         axe.axhline(y = 1.63 * np.sqrt(higher+lower),label='99%',c='red')
-        axe.axhline(y = 1.36 * np.sqrt(higher+lower),label='95%',c='orange')
+        axe.axhline(y = 1.36 * np.sqrt(higher+lower),label='95%',c='yellow')
         axe.axhline(y = 1.22 * np.sqrt(higher+lower),label='90%',c='k')
         axe.axhline(y = -1.63 * np.sqrt(higher+lower),c='red')
-        axe.axhline(y = -1.36 * np.sqrt(higher+lower),c='orange')
+        axe.axhline(y = -1.36 * np.sqrt(higher+lower),c='yellow')
         axe.axhline(y = -1.22 * np.sqrt(higher+lower),c='k')
         plt.xlabel('Rank i')
         plt.ylabel('Cusum(i)')
         if not methodstring2:
-            plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
+            if nonextremal:
+                plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' + ' (non-extremal)')
+            else:
+                plt.title('Cusum statistic for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
         else:
-            plt.title('Cusum statistic for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')
+            if nonextremal:
+                plt.title('Cusum statistic for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$'+ ' (non-extremal)')
+            else:
+                plt.title('Cusum statistic for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$')
         Second_Legend = plt.legend(loc=1, frameon=True, fancybox=True, framealpha=1.0)
         frame = Second_Legend.get_frame()
         frame.set_facecolor('White')
     return
 
-def plot_regression_residuals(x,Ref,fittedvalues,distance_indices,sorted_colours,methodstring,methodstring2=False):
+def plot_regression_residuals(x,Ref,fittedvalues,distance_indices,sorted_colours,methodstring,methodstring2=False,nonextremal=False):
     # figure containing regression residuals in terms of the same rank 
     plt.figure()
     axes = plt.gca()
@@ -326,13 +584,19 @@ def plot_regression_residuals(x,Ref,fittedvalues,distance_indices,sorted_colours
     plt.xlabel('Rank i')
     plt.ylabel('Residuals')
     if not methodstring2:
-        plt.title('Regression residuals for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
+        if nonextremal:
+            plt.title('Regression residuals for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' + ' (non-extremal)')
+        else:
+            plt.title('Regression residuals for P-B regression of GAIA ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )
     else:
-        plt.title('Regression residuals for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )        
+        if nonextremal:
+            plt.title('Regression residuals for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' + ' (non-extremal)')        
+        else:
+            plt.title('Regression residuals for P-B regression of ' + methodstring2 + ' ' + r'$\varpi$' + ' in function of ' + methodstring + ' ' + r'$\varpi$' )        
     return
 
 #------------------------------------------------------------------------------
-#                       Bootstrapping Definitions
+#           Bootstrapping Definitions (Based on Carpenter & Bithell 2000)
 #------------------------------------------------------------------------------
 
 big = True
@@ -410,8 +674,3 @@ def estimate_interval_pos(Ref,Compare,a,b,Q,B,bootstraps,interpolatedQ):
     delta = interval - model_fits
     neginterval = model_fits-delta
     return interval,neginterval
-
-
-
-
-
