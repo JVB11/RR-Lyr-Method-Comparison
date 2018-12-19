@@ -8,6 +8,20 @@
 # for use in the NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Exctinction service,
 # yielding the E(B-V) values for your sample of stars that can then be read in in the main script
 
+#   Copyright 2018 Jordan Van Beeck
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 import pandas as pd
 import numpy as np
 
@@ -16,8 +30,11 @@ import numpy as np
 manual = False
 
 # Filepath + filename for non-manual input (reading in csv's)
-Filepath = "/Users/jvb/Documents/Proposal2018/GAIA/"
-filename = "RRL_Dambis2013.csv"
+Filepath = "~/Documents/GAIA/"
+filename = "RRL.csv"
+
+# Filename of saved file:
+Saved_Filename = "sample"
 
 ###########################################################################################
 
@@ -33,7 +50,7 @@ if manual:
     # create dataframe that will be written to text file
     df = pd.DataFrame(np.vstack((star,ra,dec)).T,columns=columns)
     # write the dataframe to text file
-    df.to_csv("sample.csv",index=None)
+    df.to_csv(Saved_Filename+".csv",index=None)
 else:
     # all J2000 coordinates (in CSV) need to be in decimal degrees!
     data_csv = pd.read_csv(Filepath+filename) # load the full csv file in a dataframe
@@ -41,7 +58,7 @@ else:
     data_csv = data_csv.dropna(axis=0) # drop columns containing NaNs
     data_csv = data_csv[["Name","RA","DEC"]].rename(index=str, columns={"Name": "id", "RA": "ra", "DEC": "dec"}) # select the useful subset of columns with correct column names
     # write the dataframe to text file
-    data_csv.to_csv("sample_CSV.csv",index=None)
+    data_csv.to_csv(Saved_Filename + "_CSV.csv",index=None)
 
     
 
