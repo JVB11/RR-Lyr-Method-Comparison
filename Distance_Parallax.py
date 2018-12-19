@@ -22,16 +22,8 @@
 
 import numpy as np
 from uncertainties import ufloat
-#import uncertainties.umath as um  # sin(), etc.
 from uncertainties import unumpy
 import pandas as pd
-
-def Distance_modulus_distance(M_uncert,m,e_m,A,e_A):
-    A_factor = ufloat(A,e_A)
-    m_factor = ufloat(m,e_m)
-    exponent = 0.2*(m_factor - M_uncert + 5. - A_factor)
-    Distance = np.power(10.,exponent)
-    return Distance
 
 #------------------------------------------------------------------------------
 # Define an exception class for when we don't have a match
@@ -42,51 +34,63 @@ def match_err(string):
     raise NotAMatchError(string)
 #------------------------------------------------------------------------------
 
-def get_extinctions(ext_df,R_error):
+def get_extinctions(ext_df,R_error,our_script):
     # E(B-V) values
     EBV_S_F = unumpy.uarray(ext_df.loc['EBV_S_F'].values,ext_df.loc['e_EBV_S_F'].values)
     EBV_SFD = unumpy.uarray(ext_df.loc['EBV_SFD'].values,ext_df.loc['e_EBV_SFD'].values)
     # V extinctions
-    R_V = np.ones_like(ext_df.loc['V'].values)*3.1
+    R_V = np.ones_like(ext_df.loc['EBV_S_F'].values)*3.1
     if R_error:
-        e_R_V = np.ones_like(ext_df.loc['V'].values)*0.1
+        e_R_V = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.1
         ext_S_F_V = unumpy.uarray(R_V,e_R_V)*EBV_S_F
         ext_SFD_V = unumpy.uarray(R_V,e_R_V)*EBV_SFD
     else:
         ext_S_F_V = unumpy.uarray(R_V,np.zeros_like(R_V))*EBV_S_F
         ext_SFD_V = unumpy.uarray(R_V,np.zeros_like(R_V))*EBV_SFD
-    ext_V = unumpy.uarray(ext_df.loc['V'].values,ext_df.loc['e_V'].values)        
+        
     # Ks extinctions
-    R_S_F_Ks = np.ones_like(ext_df.loc['Ks'].values)*0.310
-    R_SFD_Ks = np.ones_like(ext_df.loc['Ks'].values)*0.382
+    R_S_F_Ks = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.310
+    R_SFD_Ks = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.382
     if R_error:
-        e_R_S_F_Ks = np.ones_like(ext_df.loc['Ks'].values)*0.001
-        e_R_SFD_Ks = np.ones_like(ext_df.loc['Ks'].values)*0.001
+        e_R_S_F_Ks = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.001
+        e_R_SFD_Ks = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.001
         ext_S_F_Ks = unumpy.uarray(R_S_F_Ks,e_R_S_F_Ks)*EBV_S_F
         ext_SFD_Ks = unumpy.uarray(R_SFD_Ks,e_R_SFD_Ks)*EBV_SFD
     else:
         ext_S_F_Ks = unumpy.uarray(R_S_F_Ks,np.zeros_like(R_S_F_Ks))*EBV_S_F
         ext_SFD_Ks = unumpy.uarray(R_SFD_Ks,np.zeros_like(R_SFD_Ks))*EBV_SFD
-    ext_Ks = unumpy.uarray(ext_df.loc['Ks'].values,ext_df.loc['e_Ks'].values)        
+    
     # W1 values
-    R_S_F_W1 = np.ones_like(ext_df.loc['W1'].values)*0.189
-    R_SFD_W1 = np.ones_like(ext_df.loc['W1'].values)*0.234
+    R_S_F_W1 = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.189
+    R_SFD_W1 = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.234
     if R_error:
-        e_R_S_F_W1 = np.ones_like(ext_df.loc['W1'].values)*0.001
-        e_R_SFD_W1 = np.ones_like(ext_df.loc['W1'].values)*0.001
+        e_R_S_F_W1 = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.001
+        e_R_SFD_W1 = np.ones_like(ext_df.loc['EBV_S_F'].values)*0.001
         ext_S_F_W1 = unumpy.uarray(R_S_F_W1,e_R_S_F_W1)*EBV_S_F
         ext_SFD_W1 = unumpy.uarray(R_SFD_W1,e_R_SFD_W1)*EBV_SFD
     else:
         ext_S_F_W1 = unumpy.uarray(R_S_F_W1,np.zeros_like(R_S_F_W1))*EBV_S_F
         ext_SFD_W1 = unumpy.uarray(R_SFD_W1,np.zeros_like(R_SFD_W1))*EBV_SFD
-    ext_W1 = unumpy.uarray(ext_df.loc['W1'].values,ext_df.loc['e_W1'].values)   
-    # Create list of names of rows of df
-    rows_df = ['ext_V','ext_V_S_F','ext_V_SFD','ext_Ks','ext_Ks_S_F',
-               'ext_Ks_SFD','ext_W1','ext_W1_S_F','ext_W1_SFD','RRABC'] 
-    # Return df containing the extinction factors for different passbands     
-    return pd.DataFrame(np.vstack((ext_V,ext_S_F_V,ext_SFD_V,ext_Ks,ext_S_F_Ks,
-                                   ext_SFD_Ks,ext_W1,ext_S_F_W1,ext_SFD_W1,
-                                   ext_df.loc['RRAB/RRC'].values)),index=rows_df, columns=list(ext_df))
+    # if we also use our dereddening script
+    if our_script:
+        ext_V = unumpy.uarray(ext_df.loc['V'].values,ext_df.loc['e_V'].values)
+        ext_Ks = unumpy.uarray(ext_df.loc['Ks'].values,ext_df.loc['e_Ks'].values)
+        ext_W1 = unumpy.uarray(ext_df.loc['W1'].values,ext_df.loc['e_W1'].values)
+        # Create list of names of rows of df
+        rows_df = ['ext_V','ext_V_S_F','ext_V_SFD','ext_Ks','ext_Ks_S_F',
+                   'ext_Ks_SFD','ext_W1','ext_W1_S_F','ext_W1_SFD','RRABC']
+        # Return df containing the extinction factors for different passbands
+        return pd.DataFrame(np.vstack((ext_V,ext_S_F_V,ext_SFD_V,ext_Ks,ext_S_F_Ks,
+                                       ext_SFD_Ks,ext_W1,ext_S_F_W1,ext_SFD_W1,
+                                       ext_df.loc['RRAB/RRC'].values)),index=rows_df, columns=list(ext_df))
+    else:
+        # Create list of names of rows of df
+        rows_df = ['ext_V_S_F','ext_V_SFD','ext_Ks_S_F',
+                   'ext_Ks_SFD','ext_W1_S_F','ext_W1_SFD','RRABC']
+        # Return df containing the extinction factors for different passbands
+        return pd.DataFrame(np.vstack((ext_S_F_V,ext_SFD_V,ext_S_F_Ks,
+                                       ext_SFD_Ks,ext_S_F_W1,ext_SFD_W1,
+                                       ext_df.loc['RRAB/RRC'].values)),index=rows_df, columns=list(ext_df))
 
 #------------------------------------------------------------------------------
 
@@ -99,15 +103,15 @@ relationtopassband = {"Dambis Ks": "Ks", "Dambis V": "V","Dambis W1": "W1",
                       "Muraveva plx": "Ks", "Neeley ": "W1", "Sesar ": "W1"}
 
 def calc_dist(m,M,A):
+    # definition that calculates the distance to the (RR Lyr) stars according to the distance modulus equation
     return np.power(10.,0.2*(m-M+5-A))
 
-def row_names_dists(ext_names_list,relation):
+def row_names_dists(ext_names_list,relation): # utility function that automatically generates names for the different PML, combined with different dereddening procedures
     dict_names = {2:"",3:"_S_F",4:"_SFD"}
     if len(relation.split()) == 1:
         return [relation.split()[0]+dict_names[len(j.split('_'))]for j in ext_names_list]
     else:
-        return [relation.split()[0]+dict_names[len(j.split('_'))]+" "+relation.split()[1] for j in ext_names_list]
-    
+        return [relation.split()[0]+dict_names[len(j.split('_'))]+" "+relation.split()[1] for j in ext_names_list]    
 
 
 def Distance_modulus_distances(M_uncert_df,m_uncert_df,ext_uncert_df,first_relation,second_relation):
@@ -140,6 +144,7 @@ def Distance_modulus_distances(M_uncert_df,m_uncert_df,ext_uncert_df,first_relat
         return pd.DataFrame(distances,index=row_names,columns=list(ext_uncert_df))
         
 def Distance_to_PLX(df_distances,RRABC=False,BRR=False,second_relation=False,df_distances2 = False,GAIA=False):
+
     if (isinstance(RRABC,bool) & isinstance(BRR,bool)):
         plx = (1./df_distances)*1000.
         # calculate parallax in mas (based on distances in pc) 
@@ -158,4 +163,3 @@ def Distance_to_PLX(df_distances,RRABC=False,BRR=False,second_relation=False,df_
             new_row_names.extend(["GAIA","RRAB/RRC","Blazhko/RRLyr"])
             # calculate parallax in mas (based on distances in pc) 
             return pd.DataFrame(np.vstack((plx,GAIA,RRABC,BRR)),index=new_row_names,columns=list(plx)) 
-
