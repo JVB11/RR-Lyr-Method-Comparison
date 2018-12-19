@@ -6,6 +6,8 @@
 
 # Description: Dereddening script used for the (manual) dereddening of RR Lyrae stars, depending on photometry scrutinously selected from literature.
 
+# This approach suffers from pulsation dependent fundamental parameters of stars, an additional uncertainty that should be taken into account!
+
 # References:
 # Castelli & Kurucz (2004): Castelli and Kurucz, New Grids of ATLAS9 Model Atmospheres, 2004, ArXiv e-prints, https://ui.adsabs.harvard.edu/#abs/2004astro.ph..5087C
 # Cardelli et al. 1989: J. A. Cardelli et al. The relationship between infrared, optical, and ultraviolet extinction. Astrophysical Journal, Part 1, 345, 1989.
@@ -36,17 +38,17 @@ plt.close()
 
 #Settings
 #########################
-# E(B-V) settings
+# E(B-V) settings: creates a grid of colour excess terms in which you want to select the optimal value
 N_ebv=1000 # nr. of E(B-V) steps
 ebv_min=0.0001 # minimal E(B-V) value
 ebv_max=0.5 # maximal E(B-V) value
-N_mc = 500 # Monte Carlo iteration
+N_mc = 500 # nr. of Monte Carlo iteration steps
 
 # decide whether or not you want to create a csv table that might be retro-inspected
 table_write = False
 # decide whether or not you want to create a raw data plot
 raw_data = False
-# decide whether or not you want to create a chi^2 plot to check form
+# decide whether or not you want to create a chi^2 plot to check shape
 Chi_Squared_Check = False
 
 # Files need to be named according to these presets
@@ -235,7 +237,7 @@ def use_nearest_interp_error(wavelength,Lambdas,A_lambdas,A_lambdas_err):
     e_y = np.sqrt(np.power(e_scaledrico,2)+np.power(e_y1,2))
     return y,e_y
 
-# PHOTOMETRIC PASSBANDS OF INTEREST FOR PML RELATIONS STUDIED (RR LYRAE STARS)
+# PHOTOMETRIC PASSBANDS OF INTEREST FOR OUR SELECTION OF PML RELATIONS (DERIVED FOR RR LYRAE STARS)
 # Visual Band V: 551 nm
 # Wise Band W1: 3.4micron (WIKI) vs. 3.32 (DUST-tool)
 # 2MASS Band Ks: 2.15micron (WIKI) vs. 2.16 (DUST-tool)
@@ -284,7 +286,7 @@ print(A_K_def)
 print(e_A_K_def)
 
 if Chi_Squared_Check:
-    #Plots to check wether chi² actually looks like chi²
+    #Plots to check whether chi² actually looks like chi²
     fig2=plt.figure()
     # plot all the Chi-squared values in function of E(B-V)
     Chiplot=plt.gca()
