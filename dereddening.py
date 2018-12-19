@@ -5,9 +5,7 @@
 # Author: Sven Nys <sven.nys@student.kuleuven.be>
 
 # Description: Dereddening script used for the (manual) dereddening of RR Lyrae stars, depending on photometry scrutinously selected from literature.
-
 # This approach suffers from pulsation dependent fundamental parameters of stars, an additional uncertainty that should be taken into account!
-
 # References:
 # Castelli & Kurucz (2004): Castelli and Kurucz, New Grids of ATLAS9 Model Atmospheres, 2004, ArXiv e-prints, https://ui.adsabs.harvard.edu/#abs/2004astro.ph..5087C
 # Cardelli et al. 1989: J. A. Cardelli et al. The relationship between infrared, optical, and ultraviolet extinction. Astrophysical Journal, Part 1, 345, 1989.
@@ -237,8 +235,7 @@ def use_nearest_interp_error(wavelength,Lambdas,A_lambdas,A_lambdas_err):
     e_y = np.sqrt(np.power(e_scaledrico,2)+np.power(e_y1,2))
     return y,e_y
 
-# PHOTOMETRIC PASSBANDS OF INTEREST FOR OUR SELECTION OF PML RELATIONS (DERIVED FOR RR LYRAE STARS)
-# Visual Band V: 551 nm
+# PHOTOMETRIC PASSBANDS OF INTEREST FOR OUR SELECTION OF PML RELATIONS (DERIVED FOR RR LYRAE STARS)# Visual Band V: 551 nm
 # Wise Band W1: 3.4micron (WIKI) vs. 3.32 (DUST-tool)
 # 2MASS Band Ks: 2.15micron (WIKI) vs. 2.16 (DUST-tool)
 
