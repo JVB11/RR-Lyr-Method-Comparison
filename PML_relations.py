@@ -36,25 +36,15 @@ def Klein_relations_W1(Period,ePeriod,RRab): # FU/FO W1 MCMC,k
     P = ufloat(Period,ePeriod)
     # first check wether star is a RRab star or whether star is a RRc star!
     if RRab:
-        # Magnitude = -0.495 - (2.38*np.log10(Period/0.55))
-        # eMagnitude = -0.495 - (2.38*np.log10(Period/0.55))
-        
         # uncertainties package: a + b*x = y
         a = ufloat(-0.495,0.013)
         b = ufloat(-2.38,0.20)
         Magnitudeuncertainties = a + b*um.log(P/0.55,10)
-        #print ucert.covariance_matrix([a,b,P,Magnitudeuncertainties])
-        #print ucert.correlation_matrix([a,b,P,Magnitudeuncertainties])
-    else:
-        # Magnitude = -0.231 - (1.64*np.log10(Period/0.32))
-        # eMagnitude = -0.231 - (1.64*np.log10(Period/0.32)) # to be changed
-        
+    else: 
         # uncertainties package: a + b*x = y
         a = ufloat(-0.231,0.031)
         b = ufloat(-1.64,0.62)
         Magnitudeuncertainties = a + b*um.log(P/0.32,10)
-        #print ucert.covariance_matrix([a,b,P,Magnitudeuncertainties])
-        #print ucert.correlation_matrix([a,b,P,Magnitudeuncertainties])
     return Magnitudeuncertainties
 
 #------------------------------------------------------------------------------
@@ -63,6 +53,7 @@ def Klein_relations_W1(Period,ePeriod,RRab): # FU/FO W1 MCMC,k
 
 def Klein_relation_Mv(FeH,eFeH):
     # y = a + b*(Fe + 1.6)
+    
     Fe = ufloat(FeH,eFeH)
     a = ufloat(0.56,0.12)
     b = ufloat(0.23,0.04)
@@ -106,12 +97,10 @@ def Neeley_relations(Period,ePeriod,FeH,eFeH,RRab):
     logP = um.log(ufloat(Period,ePeriod),10)
     # Model: y = a + b*Fe + c*log P 
     if RRab: # W1 FU
-        #logP = log(ufloat(Period,ePeriod),10)
         a = ufloat(-0.784,0.007)
         b = ufloat(0.183,0.004)
         c = ufloat(-2.274,0.022)
     else: # W1 FO
-        #logP = log(ufloat(Period,ePeriod),10) + 0.127
         a = ufloat(-1.341,0.024)
         b = ufloat(0.152,0.004)
         c = ufloat(-2.716,0.047) 
@@ -163,18 +152,13 @@ def Dambis_W1_relation(Period,ePeriod,FeH,eFeH,RRab): # <M_W1>
 
 # 2 options: 
 
-# 1) try to do 'error propagation' using the assymetrical errors, 
-# requiring us to postulate PDF's in order to gain some knowledge on combined PDF's, 
-# which can be used to extract the assymetric 'propagated' errors.
-
-# --> this approach requires some more literature search on how to use these PDF's when multiplying!
-# (The full relation is equal to:     y = a + b*Fe + c*logP --> hence we need to know how multiplications work!)
-
+# 1) perform 'error propagation' using the assymetrical errors,
+# requiring me to postulate PDF's in order to gain some knowledge on combined PDF's,
+# which can be used to `extract' the assymetric 'propagated' errors.
 # For sums, we can use the approach by Roger Barlow 
 # --> https://arxiv.org/pdf/physics/0406120.pdf and https://arxiv.org/pdf/physics/0401042.pdf
 
-# 2) symmetrize the assymetrical errors, given that the assymetry is not large --> this approach will be done below
-
+# 2) symmetrize the assymetrical errors, given that the assymetry is not large --> this approach will be followed
 
 def Sesar_relation(Period,ePeriod,FeH,eFeH,RRab,symmetric):
     if RRab:
@@ -186,12 +170,8 @@ def Sesar_relation(Period,ePeriod,FeH,eFeH,RRab,symmetric):
         stdcmin = 0.73
         stdcplus = 0.74
         Fe = ufloat(FeH,eFeH)
-        #if RRab:
-        logP = um.log(ufloat(Period,ePeriod),10)  # relation only applicable for RRab !!!!!!!!!!!!!!!!!!!!!!!!!!
-        #else:
-        #    logP = log(ufloat(Period,ePeriod),10) + 0.127 # fundamentalized
-        
-        # sigma_M = ufloat(0.07,0.08)
+        logP = um.log(ufloat(Period,ePeriod),10)  # relation only applicable for RRab !
+
         sigma_M_max = 0.04
         epsilon_max = ufloat(0,((-2.47*logP.std_dev)**2) + ((-0.42*Fe.std_dev)**2) + ((sigma_M_max)**2))   # only using maximum a posteriori values for sigma M 
         
@@ -201,7 +181,7 @@ def Sesar_relation(Period,ePeriod,FeH,eFeH,RRab,symmetric):
             c = ufloat(-0.42,max(stdcmin,stdcplus))
             Magnitudeuncertainties = a + b*(Fe-(-1.4)) + c*(logP-um.log(0.52854,10)) + epsilon_max
         # else: # Option 2
-            # do something else...
+            # create the combined PDF's from which one could potentially extract a more correct error
         return Magnitudeuncertainties
     else:
         print("Warning: The star passed to this relation is not of type RRab. This relation is only suitable for such stars. The end result for this star will be NaN +/- NaN.")
