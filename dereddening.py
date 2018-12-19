@@ -112,7 +112,7 @@ if raw_data:
 ####################################################
 scaling_model = np.interp(1250.8, model_data['wavelength'], model_data['flux']) # model has no datapoint (flux) at 1250.8 nm, so interpolation is necessary
 
-# obtain data to be scaled, obtain the scaling factor and subsequently scale the model
+# obtain data to be scaled, calculate the scaling factor and subsequently scale the model
 scaling_data = t[(t['sed_filter'] =='Johnson:J')]
 scale_factor = np.mean(scaling_data['sed_flux'])/scaling_model
 scaled_model = scale_factor*model_data['flux']
@@ -123,7 +123,7 @@ bx.plot(10.0*model_data['wavelength'], np.log10((3*10**17/model_data['wavelength
 bx.set_xscale('log')
 
 
-# R and C need to match in wavelength : interpolate lineary using the provided points for R and C
+# R and C need to match in wavelength : interpolate linearly using the provided points for R and C
 ########################################################################################################
 t_reduced_nodust = t_reduced[((3*10**9)/t_reduced['sed_freq'] < 30000) & ((3*10**9)/t_reduced['sed_freq'] >4000)] # obtain wavelength regions not affected by dust flux
 
