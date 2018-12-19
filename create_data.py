@@ -4,7 +4,22 @@
 # File: create_data.py
 # Author: Jordan Van Beeck <jordan.vanbeeck@student.kuleuven.be>
 
-# Description: Generates the text file for the main dataframe of the main script (Has to be generated because the main script is still written in python 2.7...
+# Description: Generates a text file that will be read in the main script containing the 
+# 2MASS Ks apparent magnitude, AllWise W1 apparent magnitude and GAIA DR2 parallax for a sample of stars.
+
+#   Copyright 2018 Jordan Van Beeck
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
 
 import pandas as pd
 import numpy as np
@@ -19,6 +34,13 @@ import re
 from uncertainties import unumpy
 
 import sys
+
+#-----------------------------------------------------------------------------------------
+# Stars for which the 2MASS Ks apparent magnitude, AllWise W1 apparent magnitude and GAIA DR2 parallax will be queried.
+stars = ['SV Eri','XZ Dra','SW And','RU Psc', 'X Ari','BD+184995','RZ Cep','V1057 Cas'] 
+# Specify the saved filename:       IF YOU CHANGE THIS YOU ALSO HAVE TO CHANGE THE CORRESPONDING NAME IN MAIN SCRIPT
+Savedfilename = 'W_K_plx.dat'
+#-----------------------------------------------------------------------------------------
 
 Vizier.ROW_LIMIT = -1
 
@@ -108,10 +130,6 @@ def obtain_plx_Ks_W1(starname):
             e_PLX = dataframe.iloc[matchindex]["e_Plx"].values
     return W1Mag[0],e_W1Mag[0],Kmag[0],e_Kmag[0],PLX[0],e_PLX[0]
 
-
-
-stars = ['SV Eri','XZ Dra','SW And','RU Psc', 'X Ari','BD+184995','RZ Cep','V1057 Cas'] 
-
 W1Mag = []
 KMag = []
 PLX = []
@@ -127,21 +145,17 @@ for star in stars:
      eW1Mag.append(e_W1)
      eKMag.append(e_K)
      ePLX.append(e_Pl)
-     
+# convert lists to numpy arrays    
 W1Mag = np.array(W1Mag)
 eW1Mag = np.array(eW1Mag)
 KMag = np.array(KMag)
 eKMag = np.array(eKMag)
 
-uGAIAparallaxes = unumpy.uarray(PLX,ePLX)
-#print(uGAIAparallaxes)
-
+uGAIAparallaxes = unumpy.uarray(PLX,ePLX) # unumpy array containing parallaxes
 
 # header for text file
 headertxt = ["W1Mag","eW1Mag","KMag","eKMag","PLX","ePLX"]
 headerstring = '\t'.join(headertxt)
 
 # save text file containing the W1, Ks magnitudes and GAIA parallaxes
-np.savetxt('W_K_plx.dat',np.vstack((W1Mag,eW1Mag,KMag,eKMag,PLX,ePLX)).T,delimiter='\t',header=headerstring)
-
-
+np.savetxt(Savedfilename,np.vstack((W1Mag,eW1Mag,KMag,eKMag,PLX,ePLX)).T,delimiter='\t',header=headerstring)
