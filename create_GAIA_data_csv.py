@@ -30,7 +30,7 @@ import sys
 
 #-------------------------------------------------------
 # Allows the user to specify the name under which the file is saved (IF CHANGED, has to be updated in main script!)
-savename = "GAIA_DATA_csv"
+savename = "GAIA_DATA_csv.dat"
 # Specify path + filenames for all necessary files:
 csv_path = '~/Documents/GAIA/' # folder in which both csv-files exist
 csv_gaia_id = "Xmatch.csv" # cross-match csv
@@ -83,4 +83,4 @@ headertxt = ["Starname","Parallax","e_Parallax"]
 headerstring = '\t'.join(headertxt)
 
 # save the GAIA PARALLAXES to a tab-delimited .dat-file, in order to be read in by the main script
-np.savetxt(savename+'.dat',np.vstack((starnames,PLXs,e_PLXs)).T,delimiter='\t',fmt="%s",header=headerstring)
+np.savetxt(savename,np.vstack((starnames,PLXs,e_PLXs)).T,delimiter='\t',fmt="%s",header=headerstring)
