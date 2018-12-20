@@ -6,6 +6,20 @@
 
 # Description: Main Script that will calculate distances to stars (using the absolute magnitudes and the PML relations), convert these to parallaxes and perform the actual method comparison
 
+#   Copyright 2018 Jordan Van Beeck
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 import numpy as np
 import pandas as pd
 
@@ -82,20 +96,46 @@ Directory_EBV = '/Users/jvb/Documents/Proposal2018/Input_creation/'
 filename_EBV = 'Dustmap_output_table.txt'
 #----------------------------------DUST TABLES---------------------------------
 
+#----------------------------------CSV INPUT-----------------------------------
+# set the directory of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
+create_data_path = '/Users/jvb/Documents/Proposal2018/PassingBland/'
+# filename of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
+create_data_file = 'W_K_plx.dat'
+# set the directory of the txt-file containing input csv-file for general sample characterization
+csv_path = '/Users/jvb/Documents/Proposal2018/GAIA/'
+# filename of the txt-file containing input csv-file data for general sample characterization
+csv_filename = "RRL_Dambis2013.csv"
+# set the directory of the txt-file containing your output from create_data_Blazhko_csv.py (Blazhko variability)
+csv_path_blazhko = '/Users/jvb/Documents/Proposal2018/PassingBland/'
+# filename of the txt-file containing output from create_data_Blazhko_csv.py (Blazhko variability)
+csv_filename_blazhko = "BLAZHKO_csv.dat"
+# set the directory of the txt-file containing your output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
+csv_Directory_EBV = '/Users/jvb/Documents/Proposal2018/Input_creation/'
+# filename of the txt-file containing output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
+csv_filename_EBV = 'Dustmap_output_CSV_table.txt'
+# set the directory of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
+csv_path_GAIA = '/Users/jvb/Documents/Proposal2018/PassingBland/'
+# filename of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
+csv_filename_GAIA = ''W_K_plx.dat''
+#----------------------------------CSV INPUT-----------------------------------
+
+
+
+
 #################### FUNDAMENTAL PARAMETERS / OBSERVABLES ######################
 
 # standardized input for the main script, which will be overwritten when using csv input
 
 #------------------------------------PERIOD------------------------------------
 # specify RR Lyrae pulsation period (overwritten in csv option)
-Per = np.array([0.7100,0.4800,0.4400,0.3900,0.6500,0.5000,0.3100,0.4200]) # if error is estimated to be 10-4 
-e_Per = np.array([0.0001,0.0001,0.0001,0.0001,0.0001,0.0001,0.0001,0.0001]) # estimated to be 10-4
+Per = np.array([0.7100,0.4800,0.4400,0.3900,0.6500,0.5000,0.3100,0.4200])  
+e_Per = np.array([0.0001,0.0001,0.0001,0.0001,0.0001,0.0001,0.0001,0.0001]) # uncertainty estimated to be 10^{-4}
 #------------------------------------PERIOD------------------------------------
 
 #----------------------------------METALLICITY---------------------------------
 # specify determined metallicity for RR Lyrae stars in sample (overwritten in csv option)
-FE = np.array([-1.83,-0.57,-0.04,-1.65,-2.5,1.5,-1.77,1.5]) # --> first estimates from Simbad/Vizier!! HAVE TO CHANGE
-e_FE = np.array([0.5,0.5,0.5,0.11,0.5,0.5,0.5,0.5]) 
+FE = np.array([-1.74,-0.785,-0.038,-1.54,-2.57,-0.749,-1.70,0.135]) 
+e_FE = np.array([0.12,0.077,0.067,0.37,0.2,0.05,0.14,0.083]) 
 #----------------------------------METALLICITY---------------------------------
 
 #-----------------------------------BLAZKHO------------------------------------
@@ -192,7 +232,7 @@ if full_manual_input:
 if using_create_data:
     
     # Load the data from the .dat file created by create_data.py
-    create_output = np.genfromtxt('W_K_plx.dat',delimiter='\t',names=True)
+    create_output = np.genfromtxt(create_data_path+create_data_file,delimiter='\t',names=True)
     
     # specify observed magnitudes (2MASS Ks, ALLWISE W1)
     Ksmag = create_output['KMag'] #Ks observed magnitudes
@@ -385,6 +425,7 @@ def print_functions_module(module):
     print(" ")
     for l in all_functions:
         print(l[0] + "              with arguments: " + str(inspect.getargspec(l[1])[0]) )
+        print(l[0] + "              with arguments: " + str(inspect.getargspec(l[1])[0]) )
     print(" ")
     return
 
@@ -531,6 +572,16 @@ if print_BRR_RRAB:
     print("------------------------------------------------------------------")
     sys.exit()
 
+# MAIN 'LOOP'
+if len(second_relation) == 0:
+    Distances = Dplx.Distance_modulus_distances(M_df,m_df,ext_df,first_relation,False)
+    df_plx = Dplx.Distance_to_PLX(Distances,RRABC=RRABC,BRR=BRR,GAIA=uGAIAparallaxes)
+    if BLANDALTMAN:
+        BA.Bland_Altman_main(df_plx,first_relation,second_relation,our_script,outfile_BA,percent=percent_BA , logplot=log_BA )
+    if PASSINGBABLOK:
+        PB.Passing_Bablok_Regression_Ref(df_plx,our_script,outfile_PB)
+    
+else:   
 # MAIN 'LOOP'
 if len(second_relation) == 0:
     Distances = Dplx.Distance_modulus_distances(M_df,m_df,ext_df,first_relation,False)
