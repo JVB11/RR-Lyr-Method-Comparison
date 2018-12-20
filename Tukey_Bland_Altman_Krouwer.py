@@ -75,44 +75,64 @@ def f_ODR(B, x):
     # Return an array in the same format as y, that is passed to Data.
     return B[0]*x + B[1]
 
-def generate_fit_models(nom,err,x_variable,weighted):
+def generate_fit_models(nom,err,x_variable,weighted,nonextremal=False):
     # Constructs the different linear fit models of the differences, used to determine biases.
-    # non-extremal differences: avoiding outliers!
-    non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.5 or below -1.5
-    non_extremal_nom = nom.iloc[non_extremal_indices]
-    non_extremal_err = err.iloc[non_extremal_indices]
+    if nonextremal:
+        # non-extremal differences: avoiding outliers!
+        non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+        non_extremal_nom = nom.iloc[non_extremal_indices]
+        non_extremal_err = err.iloc[non_extremal_indices]
+        # generate design matrix for fit using Patsy
+        non_extremal_y,non_extremal_X = dmatrices('Difference ~ ' + str(x_variable) , data=non_extremal_nom, return_type='dataframe')
+        # generate a weighted or unweighted linear least squares model using Statsmodels
+        if weighted:
+            non_extremal_mod = sm.WLS(non_extremal_y,non_extremal_X,weights=1./(non_extremal_err['Difference']**2 + non_extremal_err[str(x_variable)]**2)**(1./2.))
+        else:
+            non_extremal_mod = sm.OLS(non_extremal_y,non_extremal_X)
+            # generate a robust fitting model that punishes outliers, using the Huber loss function
+        non_extremal_RLM_mod = sm.RLM(non_extremal_y,non_extremal_X,M=sm.robust.norms.HuberT())
+        # generate data format for ODR
+        non_extremal_ODR_data = odr.Data(non_extremal_nom[x_variable].values, non_extremal_nom['Difference'].values, 
+                            wd=1./np.power(non_extremal_err[x_variable].values,2), 
+                            we=1./np.power(non_extremal_err['Difference'].values,2))
+        # generate an orthogonal distance fitting model (Deming regression)
+        non_extremal_ODR_mod = odr.Model(f_ODR)
+        # instantiate ODR with data, model and initial parameter estimate
+        non_extremal_odr_mod = odr.ODR(non_extremal_ODR_data, non_extremal_ODR_mod, beta0=[0., 0.]) # initial estimate = 0 * X + 0 = no difference!
+        # generate the fit results
+        non_extremal_res = non_extremal_mod.fit()
+        non_extremal_RLM_res = non_extremal_RLM_mod.fit()
+        non_extremal_odr_res = non_extremal_odr_mod.run()
+        # generate residuals and corresponding errors on the residual, to be used in ODR fit plot
+        non_extremal_residual_odr,non_extremal_sigma_odr = calc_residual_sigma_odr(non_extremal_odr_res,non_extremal_nom[x_variable].values,
+                                                         non_extremal_nom['Difference'].values,
+                                                         non_extremal_err[x_variable].values,
+                                                         non_extremal_err['Difference'].values)
+        # generate the confidence bands of the (non-)weighted model
+        non_extremal_prstd, non_extremal_iv_l, non_extremal_iv_u = wls_prediction_std(non_extremal_res)   
+
+
     # generate design matrix for fit using Patsy
     y,X = dmatrices('Difference ~ ' + str(x_variable) , data=nom, return_type='dataframe')
-    non_extremal_y,non_extremal_X = dmatrices('Difference ~ ' + str(x_variable) , data=non_extremal_nom, return_type='dataframe')
     # generate a weighted or unweighted linear least squares model using Statsmodels
     if weighted:
         mod = sm.WLS(y,X,weights=1./(err['Difference']**2 + err[str(x_variable)]**2)**(1./2.))
-        non_extremal_mod = sm.WLS(non_extremal_y,non_extremal_X,weights=1./(non_extremal_err['Difference']**2 + non_extremal_err[str(x_variable)]**2)**(1./2.))
     else:
         mod = sm.OLS(y,X)
-        non_extremal_mod = sm.OLS(non_extremal_y,non_extremal_X)
     # generate a robust fitting model that punishes outliers, using the Huber loss function
     RLM_mod = sm.RLM(y,X,M=sm.robust.norms.HuberT())
-    non_extremal_RLM_mod = sm.RLM(non_extremal_y,non_extremal_X,M=sm.robust.norms.HuberT())
     # generate an orthogonal distance fitting model (Deming regression)
     ODR_mod = odr.Model(f_ODR)
     # generate data format for ODR
     ODR_data = odr.Data(nom[x_variable].values, nom['Difference'].values, 
                         wd=1./np.power(err[x_variable].values,2), 
                         we=1./np.power(err['Difference'].values,2))
-    non_extremal_ODR_data = odr.Data(non_extremal_nom[x_variable].values, non_extremal_nom['Difference'].values, 
-                        wd=1./np.power(non_extremal_err[x_variable].values,2), 
-                        we=1./np.power(non_extremal_err['Difference'].values,2))
     # instantiate ODR with data, model and initial parameter estimate
     odr_mod = odr.ODR(ODR_data, ODR_mod, beta0=[0., 0.]) # initial estimate = 0 * X + 0 = no difference!
-    non_extremal_odr_mod = odr.ODR(non_extremal_ODR_data, ODR_mod, beta0=[0., 0.]) # initial estimate = 0 * X + 0 = no difference!
     # generate the fit results
     res = mod.fit()
     RLM_res = RLM_mod.fit()
     odr_res = odr_mod.run()
-    non_extremal_res = non_extremal_mod.fit()
-    non_extremal_RLM_res = non_extremal_RLM_mod.fit()
-    non_extremal_odr_res = non_extremal_odr_mod.run()
     # Generate a printout of the ODR results (commented out for now)
     # odr_res.pprint()
     # generate residuals and corresponding errors on the residual, to be used in ODR fit plot
@@ -120,14 +140,13 @@ def generate_fit_models(nom,err,x_variable,weighted):
                                                      nom['Difference'].values,
                                                      err[x_variable].values,
                                                      err['Difference'].values)
-    non_extremal_residual_odr,non_extremal_sigma_odr = calc_residual_sigma_odr(non_extremal_odr_res,non_extremal_nom[x_variable].values,
-                                                     non_extremal_nom['Difference'].values,
-                                                     non_extremal_err[x_variable].values,
-                                                     non_extremal_err['Difference'].values)
     # generate the confidence bands of the (non-)weighted model
-    prstd, iv_l, iv_u = wls_prediction_std(res)   
-    non_extremal_prstd, non_extremal_iv_l, non_extremal_iv_u = wls_prediction_std(non_extremal_res)   
-    return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr
+    prstd, iv_l, iv_u = wls_prediction_std(res)  
+    
+    if nonextremal:
+        return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr
+    else:
+        return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr
 
 def calc_residual_sigma_odr(output,x_data,y_data,x_sigma,y_sigma):
     # Calculate initial residuals and adjusted error 'sigma_odr'
@@ -152,16 +171,6 @@ def calc_residual_sigma_odr(output,x_data,y_data,x_sigma,y_sigma):
     return residual_odr,sigma_odr
 
 
-def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True, percent=False, logplot=False):
-    # loads in the parallax dataframe in order to obtain parameters for
-    # a Tukey mean-difference plot (also called a Bland-Altman plot), or Krouwer plot,
-    # in order to better compare the different methods
-    
-    # generate list of stars  
-    stars = list(plx_df)
-    # generate list of methods
-    methods = list(plx_df.index)
-    
     # if using our dereddening script as well
     if our_script:
         # double PML method comparison = 3 + 3 + 1 + 1 rows
@@ -186,14 +195,25 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             plt_plx_df = plx_df.loc[:,plx_df.loc['RRAB/RRC']=='RRAB']
                             # convert df input containing ufloats to readable output
                             nom,err = convert_uncert_df_to_nom_err(plt_df)
-                            # Do the actual fitting
-                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                            # Generate the Bland-Altman/Krouwer plots
-                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                      odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                      non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
-                                                      non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
-                                                      method2=methodname2,percent=percent,logplot=logplot)
+                            non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                            if len(non_extremal_indices) > 2:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                          odr_res,sigma_odr,residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot)
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X,
+                                                          non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                          non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot,nonextremal=True)
+                            else:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                          odr_res,sigma_odr,residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot)
                             # Generate normality histograms
                             Normality_histogram(nom['Difference'],methodname1,method2=methodname2)
                             # Generate normality assessments
@@ -201,18 +221,30 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             Normality_tests(f,nom['Difference'],methodname2)
                             # Generate regression diagnostics plots
                             regression_diagnostics_plot(nom,mod,X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey')
-                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            if len(non_extremal_indices) > 2:
+                                regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
                         else:
                             # convert df input containing ufloats to readable output
                             nom,err = convert_uncert_df_to_nom_err(plot_df)
-                            # Do the actual fitting
-                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                            # Generate the Bland-Altman/Krouwer plots
-                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                      odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                      non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
-                                                      non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
-                                                      method2=methodname2,percent=percent,logplot=logplot)
+                            non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                            if len(non_extremal_indices) > 2:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                          odr_res,sigma_odr,residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot)
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X,
+                                                          non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                          non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot,nonextremal=True)
+                            else:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                          odr_res,sigma_odr,residual_odr,methodname1,
+                                                          method2=methodname2,percent=percent,logplot=logplot)
                             # Generate normality histograms
                             Normality_histogram(nom['Difference'],methodname1,method2=methodname2)
                             # Generate normality assessments
@@ -220,7 +252,8 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             Normality_tests(f,nom['Difference'],methodname2)
                             # Generate regression diagnostics plots
                             regression_diagnostics_plot(nom,mod,X,alfa,beta,plx_df,'Mean',weighted,'Tukey')
-                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            if len(non_extremal_indices) > 2:
+                                regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
             return
     
         # PML + GAIA method comparison = 3 + 1 + 1 + 1 rows
@@ -243,21 +276,37 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         plt_plx_df = plx_df.loc[:,plx_df.loc['RRAB/RRC']=='RRAB']
                         plt_alfa_Krouwer = alfa_Krouwer[plx_df.loc['RRAB/RRC']=='RRAB']
                         # convert df input containing ufloats to readable output
-                        nom,err = convert_uncert_df_to_nom_err(plt_df)
-                        # Do the actual fitting
-                        X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted) # Tukey
-                        X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted) # Krouwer
-                        # Generate the Bland-Altman/Krouwer plots
-                        Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
-                                                  RLM_res_K,odr_res_K,sigma_odr_K,
-                                                  residual_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_iv_u_K,non_extremal_iv_l_K,
-                                                  non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
-                                                  non_extremal_residual_odr_K,methodname,percent=percent,logplot=logplot)
-                        Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                  odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                  non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,RLM_res,
-                                                  non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
-                                                  methodname,method2=method2,percent=percent,logplot=logplot)
+                        nom,err = convert_uncert_df_to_nom_err(plt_df)                        
+                        non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                        if len(non_extremal_indices) > 2:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True) # Tukey
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted,nonextremal=True) # Krouwer
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                      RLM_res_K,odr_res_K,sigma_odr_K,
+                                                      residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                      odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X_K,non_extremal_res_K,non_extremal_iv_u_K,non_extremal_iv_l_K,
+                                                      non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
+                                                      non_extremal_residual_odr_K,methodname,percent=percent,logplot=logplot,nonextremal=True)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X,
+                                                      non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                      non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot,nonextremal=True)
+                        else:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted) # Tukey
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted) # Krouwer
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                      RLM_res_K,odr_res_K,sigma_odr_K,
+                                                      residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                      odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
                         # Generate normality histograms
                         Normality_histogram(nom['Difference'],methodname,method2='GAIA Reference')
                         # Generate normality assessments
@@ -265,23 +314,45 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         # Generate regression diagnostics plots
                         regression_diagnostics_plot(nom,mod,X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey')
                         regression_diagnostics_plot(nom,mod_K,X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer')
-                        regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
-                        regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
+                        if len(non_extremal_indices) > 2:
+                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
                     else:
                         # convert df input containing ufloats to readable output
                         nom,err = convert_uncert_df_to_nom_err(plot_df)
-                        # Do the actual fitting
-                        X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted) # Tukey
-                        X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted) # Krouwer
-                        # Generate the Bland-Altman/Krouwer plots
-                        Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
-                                                  RLM_res_K,odr_res_K,sigma_odr_K,
-                                                  residual_odr_K,methodname,percent=percent,logplot=logplot)
-                        Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                  odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                  non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,RLM_res,
-                                                  non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
-                                                  methodname,method2=method2,percent=percent,logplot=logplot)
+                        non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                        if len(non_extremal_indices) > 2:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True) # Tukey
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted,nonextremal=True) # Krouwer
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                      RLM_res_K,odr_res_K,sigma_odr_K,
+                                                      residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                      odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X_K,non_extremal_res_K,
+                                                      non_extremal_iv_u_K,non_extremal_iv_l_K,
+                                                      non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
+                                                      non_extremal_residual_odr_K,methodname,percent=percent,logplot=logplot,nonextremal=True)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X,
+                                                      non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                      non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot,nonextremal=True)
+ 
+                        else:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted) # Tukey
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted) # Krouwer
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                      RLM_res_K,odr_res_K,sigma_odr_K,
+                                                      residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                      odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+ 
                         # Generate normality histograms
                         Normality_histogram(nom['Difference'],methodname,method2='GAIA Reference')
                         # Generate normality assessments
@@ -289,8 +360,9 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         # Generate regression diagnostics plots
                         regression_diagnostics_plot(nom,mod,X,alfa,beta,plx_df,'Mean',weighted,'Tukey')
                         regression_diagnostics_plot(nom,mod_K,X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer')
-                        regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
-                        regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
+                        if len(non_extremal_indices) > 2:
+                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
             return
     else:
         # double PML method comparison = 3 + 3 + 1 + 1 rows
@@ -315,14 +387,26 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             plt_plx_df = plx_df.loc[:,plx_df.loc['RRAB/RRC']=='RRAB']
                             # convert df input containing ufloats to readable output
                             nom,err = convert_uncert_df_to_nom_err(plt_df)
-                            # Do the actual fitting
-                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                            # Generate the Bland-Altman/Krouwer plots
-                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                          odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                          non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,RLM_res,
-                                                          non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
-                                                          method2=methodname2,percent=percent,logplot=logplot)
+                            non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                            if len(non_extremal_indices) > 2:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                              odr_res,sigma_odr,residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot)
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X,
+                                                              non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                              non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot,nonextremal=True)
+                            else:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                              odr_res,sigma_odr,residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot)
+ 
                             # Generate normality histograms
                             Normality_histogram(nom['Difference'],methodname1,method2=methodname2)
                             # Generate normality assessments
@@ -330,18 +414,30 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             Normality_tests(f,nom['Difference'],methodname2)
                             # Generate regression diagnostics plots
                             regression_diagnostics_plot(nom,mod,X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey')
-                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            if len(non_extremal_indices) > 2:                            
+                                regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
                         else:
                             # convert df input containing ufloats to readable output
                             nom,err = convert_uncert_df_to_nom_err(plot_df)
-                            # Do the actual fitting
-                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                            # Generate the Bland-Altman/Krouwer plots
-                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
-                                                          odr_res,sigma_odr,residual_odr,non_extremal_X,
-                                                          non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,RLM_res,
-                                                          non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
-                                                          method2=methodname2,percent=percent,logplot=logplot)
+                            non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                            if len(non_extremal_indices) > 2:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                              odr_res,sigma_odr,residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot)
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X,
+                                                              non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,non_extremal_RLM_res,
+                                                              non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot,nonextremal=True)
+                            else:
+                                # Do the actual fitting
+                                X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                                # Generate the Bland-Altman/Krouwer plots
+                                Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,
+                                                              odr_res,sigma_odr,residual_odr,methodname1,
+                                                              method2=methodname2,percent=percent,logplot=logplot)
                             # Generate normality histograms
                             Normality_histogram(nom['Difference'],methodname1,method2=methodname2)
                             # Generate normality assessments
@@ -349,7 +445,8 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                             Normality_tests(f,nom['Difference'],methodname2)
                             # Generate regression diagnostics plots
                             regression_diagnostics_plot(nom,mod,X,alfa,beta,plx_df,'Mean',weighted,'Tukey')
-                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            if len(non_extremal_indices) > 2:                            
+                                regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
             return
 
         # PML + GAIA method comparison = 3 + 1 + 1 + 1 rows
@@ -373,21 +470,34 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         plt_alfa_Krouwer = alfa_Krouwer[plx_df.loc['RRAB/RRC']=='RRAB']
                         # convert df input containing ufloats to readable output
                         nom,err = convert_uncert_df_to_nom_err(plt_df)
-                        # Do the actual fitting
-                        X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                        X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted)
-                        # Generate the Bland-Altman/Krouwer plots
-                        Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
-                                                      RLM_res_K,odr_res_K,sigma_odr_K,
-                                                      residual_odr_K,non_extremal_X_K,
-                                                      non_extremal_res_K,non_extremal_iv_u_K,non_extremal_iv_l_K,
-                                                      non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
-                                                      non_extremal_residual_odr_K,methodname,percent=percent,logplot=logplot)
-                        Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
-                                                  non_extremal_X,non_extremal_res,non_extremal_iv_u,
-                                                  non_extremal_iv_l,non_extremal_RLM_res,
-                                                  non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
-                                                  methodname,method2=method2,percent=percent,logplot=logplot)
+                        non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                        if len(non_extremal_indices) > 2:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted,nonextremal=True)
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                          RLM_res_K,odr_res_K,sigma_odr_K,
+                                                          residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X_K,non_extremal_res_K,non_extremal_iv_u_K,non_extremal_iv_l_K,
+                                                          non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
+                                                          non_extremal_residual_odr_K,methodname,percent=percent,logplot=logplot,nonextremal=True)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,non_extremal_X,non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,
+                                                      non_extremal_RLM_res,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot,nonextremal=True)
+                        else:   
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted)
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                          RLM_res_K,odr_res_K,sigma_odr_K,
+                                                          residual_odr_K,methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plt_plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+
                         # Generate normality histograms
                         Normality_histogram(nom['Difference'],methodname,method2='GAIA Reference')
                         # Generate normality assessments
@@ -395,26 +505,43 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         # Generate regression diagnostics plots
                         regression_diagnostics_plot(nom,mod,X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey')
                         regression_diagnostics_plot(nom,mod_K,X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer')
-                        regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
-                        regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
+                        if len(non_extremal_indices) > 2:
+                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,plt_alfa,plt_beta,plt_plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,plt_alfa_Krouwer,plt_beta,plt_plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
                     else:
                         # convert df input containing ufloats to readable output
                         nom,err = convert_uncert_df_to_nom_err(plot_df)
-                        # Do the actual fitting
-                        X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
-                        X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted)
-                        # Generate the Bland-Altman/Krouwer plots
-                        Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
-                                                      RLM_res_K,odr_res_K,sigma_odr_K,
-                                                      residual_odr_K,non_extremal_X_K,non_extremal_res_K,
-                                                      non_extremal_iv_u_K,non_extremal_iv_l_K,
-                                                      non_extremal_RLM_res_K,non_extremal_odr_res_K,
-                                                      non_extremal_sigma_odr_K,non_extremal_residual_odr_K,
-                                                      methodname,percent=percent,logplot=logplot)
-                        Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
-                                                  non_extremal_X,non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,
-                                                  non_extremal_RLM_res,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
-                                                  methodname,method2=method2,percent=percent,logplot=logplot)
+                        non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
+                        if len(non_extremal_indices) > 2:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr = generate_fit_models(nom,err,'Mean',weighted,nonextremal=True)
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K,non_extremal_X_K,non_extremal_res_K,non_extremal_mod_K,non_extremal_RLM_res_K,non_extremal_RLM_mod_K,non_extremal_iv_u_K,non_extremal_iv_l_K,non_extremal_odr_res_K,non_extremal_residual_odr_K,non_extremal_sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted,nonextremal=True)
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                          RLM_res_K,odr_res_K,sigma_odr_K,
+                                                          residual_odr_K,
+                                                          methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X_K,non_extremal_res_K,non_extremal_iv_u_K,non_extremal_iv_l_K,
+                                                          non_extremal_RLM_res_K,non_extremal_odr_res_K,non_extremal_sigma_odr_K,
+                                                          non_extremal_residual_odr_K,
+                                                          methodname,percent=percent,logplot=logplot,nonextremal=True)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X,non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,
+                                                      non_extremal_RLM_res,non_extremal_odr_res,non_extremal_sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot,nonextremal=True)
+
+                        else:
+                            # Do the actual fitting
+                            X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr = generate_fit_models(nom,err,'Mean',weighted)
+                            X_K,res_K,mod_K,RLM_res_K,RLM_mod_K,iv_u_K,iv_l_K,odr_res_K,residual_odr_K,sigma_odr_K = generate_fit_models(nom,err,'Reference',weighted)
+                            # Generate the Bland-Altman/Krouwer plots
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X_K,res_K,iv_u_K,iv_l_K,
+                                                          RLM_res_K,odr_res_K,sigma_odr_K,
+                                                          residual_odr_K,
+                                                          methodname,percent=percent,logplot=logplot)
+                            Bland_Altman_Krouwer_plot(f,plx_df,nom,err,X,res,iv_u,iv_l,RLM_res,odr_res,sigma_odr,residual_odr,
+                                                      methodname,method2=method2,percent=percent,logplot=logplot)
                         # Generate normality histograms
                         Normality_histogram(nom['Difference'],methodname,method2='GAIA Reference')
                         # Generate normality assessments
@@ -422,9 +549,11 @@ def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True,
                         # Generate regression diagnostics plots
                         regression_diagnostics_plot(nom,mod,X,alfa,beta,plx_df,'Mean',weighted,'Tukey')
                         regression_diagnostics_plot(nom,mod_K,X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer')
-                        regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
-                        regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
+                        if len(non_extremal_indices) > 2:
+                            regression_diagnostics_plot(nom,non_extremal_mod,non_extremal_X,alfa,beta,plx_df,'Mean',weighted,'Tukey',non_extremal=True)
+                            regression_diagnostics_plot(nom,non_extremal_mod_K,non_extremal_X_K,alfa_Krouwer,beta,plx_df,'Reference',weighted,'Krouwer',non_extremal=True)
             return
+
  
 
 def regression_diagnostics_plot(nom,mod,X,plotalfa,plotbeta,df,x_string,weighted,plotstring,non_extremal=False):
@@ -438,8 +567,13 @@ def regression_diagnostics_plot(nom,mod,X,plotalfa,plotbeta,df,x_string,weighted
         plotbeta = plotbeta.copy().iloc[non_extremal_indices]
         df = df.reindex(columns=sortedstars) # make sure df is ordered in same way as nom
         df = df.copy().T.iloc[non_extremal_indices].T
+    
     if len(plotalfa) > 30:
-        markersize = 8 # plot markersize        
+        markersize = 12 # change markersize
+    elif len(plotalfa) > 50:
+        markersize = 8 # change markersize
+    else:
+        markersize= 36 # default        
     # get nominal values
     alfa,_ = convert_uncert_df_to_nom_err(plotalfa)
     beta,_ = convert_uncert_df_to_nom_err(plotbeta)
@@ -488,8 +622,11 @@ def Normality_histogram(differences,method1,method2='GAIA Reference'):
     # plot an estimate of the normal distribution without extremal values 
     # (as the distribution fit is affected significantly by those)
     non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.5 or below -1.5
-    sns.distplot(differences[non_extremal_indices],fit=norm,kde=False,hist=False,fit_kws={"color":"red"})
-    Legend = plt.legend(['Norm','Norm non-extremal', 'KDE'],loc='upper left', frameon=True, fancybox=True, framealpha=1.0);
+    if len(non_extremal_indices) > 2:
+        sns.distplot(differences[non_extremal_indices],fit=norm,kde=False,hist=False,fit_kws={"color":"red"})
+        Legend = plt.legend(['Norm','Norm non-extremal', 'KDE'],loc='upper left', frameon=True, fancybox=True, framealpha=1.0)
+    else:
+        Legend = plt.legend(['Norm', 'KDE'],loc='upper left', frameon=True, fancybox=True, framealpha=1.0)        
     frame = Legend.get_frame()
     frame.set_facecolor('White')
     if method2=='GAIA Reference':
@@ -500,7 +637,12 @@ def Normality_histogram(differences,method1,method2='GAIA Reference'):
     return
 
 def Pair_grid(df_list,df,GAIA):
-    markersize = 12 # plot markersize
+    if len(df_list[0]) > 30:
+        markersize = 12 # change markersize
+    elif len(df_list[0]) > 50:
+        markersize = 8 # change markersize
+    else:
+        markersize= 36 # default  
     # use first item/method in dataframe list to obtain the star list
     totdf = df_list[0]
     # create dataframe containing GAIA data
@@ -537,27 +679,33 @@ def Pair_grid(df_list,df,GAIA):
 def Normality_tests(outfile,differences,method): 
     # testing the non-extremal distribution
     non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten()
-    non_extremal_differences = differences[non_extremal_indices]
+    if len(non_extremal_indices) > 2:
+        non_extremal_differences = differences[non_extremal_indices]
+        # catastrophic outlier ratio calculation (see Ivezic et al. (2014)):
+        stdev_differences_non_extremal = np.std(non_extremal_differences, ddof=1)
+        iqr_non_extremal = stats.iqr(non_extremal_differences)
+        stdev_G_non_extremal = 0.7413 * iqr_non_extremal
+        catastrop_outlier_ratio_non_extremal = stdev_differences_non_extremal / stdev_G_non_extremal
+        # mean - median test (see Ivezic et al. (2014))
+        mean_med_non_extremal = np.mean(non_extremal_differences) - np.median(non_extremal_differences)
+        # Calculate Z_1 and Z_2 statistics (see Ivezic et al. (2014))
+        Z_1_non_extremal = 1.3 * (np.abs(mean_med_non_extremal)/stdev_differences_non_extremal) * np.sqrt(len(non_extremal_differences))
+        Z_2_non_extremal = 1.1 * np.abs(catastrop_outlier_ratio_non_extremal - 1.0) * np.sqrt(len(non_extremal_differences))
+
     # catastrophic outlier ratio calculation (see Ivezic et al. (2014)):
     stdev_differences = np.std(differences, ddof=1)
     iqr = stats.iqr(differences)
     stdev_G = 0.7413 * iqr
-    stdev_differences_non_extremal = np.std(non_extremal_differences, ddof=1)
-    iqr_non_extremal = stats.iqr(non_extremal_differences)
-    stdev_G_non_extremal = 0.7413 * iqr_non_extremal
     catastrop_outlier_ratio = stdev_differences / stdev_G
-    catastrop_outlier_ratio_non_extremal = stdev_differences_non_extremal / stdev_G_non_extremal
     # mean - median test (see Ivezic et al. (2014))
     mean_med = np.mean(differences) - np.median(differences)
-    mean_med_non_extremal = np.mean(non_extremal_differences) - np.median(non_extremal_differences)
     # Calculate Z_1 and Z_2 statistics (see Ivezic et al. (2014))
     Z_1 = 1.3 * (np.abs(mean_med)/stdev_differences) * np.sqrt(len(differences))
-    Z_1_non_extremal = 1.3 * (np.abs(mean_med_non_extremal)/stdev_differences_non_extremal) * np.sqrt(len(non_extremal_differences))
     Z_2 = 1.1 * np.abs(catastrop_outlier_ratio - 1.0) * np.sqrt(len(differences))
-    Z_2_non_extremal = 1.1 * np.abs(catastrop_outlier_ratio_non_extremal - 1.0) * np.sqrt(len(non_extremal_differences))
     # print the output of different statistical tests for normality
     shap = stats.shapiro(differences)
-    shap_non_extremal = stats.shapiro(non_extremal_differences)
+    if len(non_extremal_indices) > 2:
+        shap_non_extremal = stats.shapiro(non_extremal_differences)
     
     if sys.version_info[0] < 3: # if python 2
     
@@ -568,7 +716,10 @@ def Normality_tests(outfile,differences,method):
         print >> outfile," "
         print >> outfile," "
         print >> outfile," "
-        print >> outfile,"Total sample size: " + str(len(differences)) + "  vs. non-extremal sample size: " + str(len(non_extremal_differences)) + " (" + str((len(non_extremal_differences)/(len(differences)*1.0))*100.) +"%)"
+        if len(non_extremal_indices) > 2:
+            print >> outfile,"Total sample size: " + str(len(differences)) + "  vs. non-extremal sample size: " + str(len(non_extremal_differences)) + " (" + str((len(non_extremal_differences)/(len(differences)*1.0))*100.) +"%)"
+        else:
+            print >> outfile,"Total sample size: " + str(len(differences))           
         print >> outfile," "
         print >> outfile," "
         print >> outfile,"Mean - Median test (MM) ~ 0 with sigma ~ 0.76 s /sqrt(N) (s= sample stdev,N = sample size > 100) if normally distributed!"
@@ -576,20 +727,22 @@ def Normality_tests(outfile,differences,method):
         print >> outfile,"  Z1 < several sigma"
         print >> outfile,"MM: " + str(mean_med)
         print >> outfile,"Z1: " + str(Z_1)
-        print >> outfile," If Gaussian (non-extremal sample): MM ~ 0 +/- " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))) + " (95% confidence interval: " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")"
-        print >> outfile,"  Z1 < few sigma"
-        print >> outfile,"MM (non-extremal sample): " + str(mean_med_non_extremal)
-        print >> outfile,"Z1 (non-extremal sample): " + str(Z_1_non_extremal)
+        if len(non_extremal_indices) > 2:
+            print >> outfile," If Gaussian (non-extremal sample): MM ~ 0 +/- " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))) + " (95% confidence interval: " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")"
+            print >> outfile,"  Z1 < few sigma"
+            print >> outfile,"MM (non-extremal sample): " + str(mean_med_non_extremal)
+            print >> outfile,"Z1 (non-extremal sample): " + str(Z_1_non_extremal)
         print >> outfile," "
         print >> outfile,"Catastrophic outlier ratio (CAR) ~ 1 with sigma ~ 0.92/sqrt(N) (N = sample size > 100) if normally distributed!"
         print >> outfile," If Gaussian: CAR ~ 1 +/- " + str(0.92/np.sqrt(len(differences))) + " (95% confidence interval: " + str((0.92/np.sqrt(len(differences)))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")"
         print >> outfile,"  Z2 < few sigma"
         print >> outfile,"CAR:  " + str(catastrop_outlier_ratio)
         print >> outfile,"Z2: " + str(Z_2)
-        print >> outfile," If Gaussian: CAR (non-extremal sample) ~ 1 +/- " + str(0.92/np.sqrt(len(non_extremal_differences)))+ " (95% confidence interval: " + str((0.92/np.sqrt(len(non_extremal_differences)))*stats.t.ppf((1.95) / 2., len(non_extremal_differences)-1)) + ")"
-        print >> outfile,"  Z2 < several sigma"
-        print >> outfile,"CAR (non-extremal sample): " + str(catastrop_outlier_ratio_non_extremal)
-        print >> outfile,"Z2 (non-extremal sample): " + str(Z_2_non_extremal)
+        if len(non_extremal_indices) > 2:
+            print >> outfile," If Gaussian: CAR (non-extremal sample) ~ 1 +/- " + str(0.92/np.sqrt(len(non_extremal_differences)))+ " (95% confidence interval: " + str((0.92/np.sqrt(len(non_extremal_differences)))*stats.t.ppf((1.95) / 2., len(non_extremal_differences)-1)) + ")"
+            print >> outfile,"  Z2 < several sigma"
+            print >> outfile,"CAR (non-extremal sample): " + str(catastrop_outlier_ratio_non_extremal)
+            print >> outfile,"Z2 (non-extremal sample): " + str(Z_2_non_extremal)
         print >> outfile," "
         print >> outfile," "
         print >> outfile,"Typical Significance Level Alpha adopted = 0.05"
@@ -599,11 +752,13 @@ def Normality_tests(outfile,differences,method):
         print >> outfile,"(p > alpha significance level)"
         print >> outfile,"W-statistic: " + str(shap[0])
         print >> outfile,"p-value: " + str(shap[1])
-        print >> outfile,"non-extremal W-statistic: " + str(shap_non_extremal[0])
-        print >> outfile,"non-extremal p-value: " + str(shap_non_extremal[1])
+        if len(non_extremal_indices) > 2:
+            print >> outfile,"non-extremal W-statistic: " + str(shap_non_extremal[0])
+            print >> outfile,"non-extremal p-value: " + str(shap_non_extremal[1])
         print >> outfile," "    
         ands = stats.anderson(differences,dist='norm')
-        ands_non_extremal = stats.anderson(non_extremal_differences,dist='norm')
+        if len(non_extremal_indices) > 2:
+            ands_non_extremal = stats.anderson(non_extremal_differences,dist='norm')
         print >> outfile,"Anderson-Darling Results Method " + method + ":"
         print >> outfile,"(A2 > Critical value to reject null hypothesis)"
         # If the returned statistic is larger than these critical values then for the corresponding significance level,
@@ -611,12 +766,14 @@ def Normality_tests(outfile,differences,method):
         print >> outfile,"A2: " + str(ands[0])
         print >> outfile,"Critical:" + str(ands[1])
         print >> outfile,"Significance level:" + str(ands[2])
-        print >> outfile,"non-extremal A2: " + str(ands_non_extremal[0])
-        print >> outfile,"non-extremal Critical: " + str(ands_non_extremal[1])
-        print >> outfile,"non-extremal Significance level: " + str(ands_non_extremal[2])
+        if len(non_extremal_indices) > 2:
+            print >> outfile,"non-extremal A2: " + str(ands_non_extremal[0])
+            print >> outfile,"non-extremal Critical: " + str(ands_non_extremal[1])
+            print >> outfile,"non-extremal Significance level: " + str(ands_non_extremal[2])
         print >> outfile," "
         kolm = stats.kstest(differences, 'norm')
-        kolm_non_extremal = stats.kstest(non_extremal_differences, 'norm')
+        if len(non_extremal_indices) > 2:
+            kolm_non_extremal = stats.kstest(non_extremal_differences, 'norm')
         print >> outfile,"Kolmogorov-Smirnov Results Method " + method + ":"
         print >> outfile,"The hypothesis regarding the distributional form is rejected if the test statistic, D, is greater than the critical (p-)value. "
         #This performs a test of the distribution G(x) of an observed random variable against a given distribution F(x). 
@@ -625,18 +782,21 @@ def Normality_tests(outfile,differences,method):
         #The KS test is only valid for continuous distributions.
         print >> outfile,"D: " +  str(kolm[0])
         print >> outfile,"p-value: " + str(kolm[1])
-        print >> outfile,"non-extremal D: " + str(kolm_non_extremal[0])
-        print >> outfile,"non-extremal p-value: " + str(kolm_non_extremal[1])
+        if len(non_extremal_indices) > 2:
+            print >> outfile,"non-extremal D: " + str(kolm_non_extremal[0])
+            print >> outfile,"non-extremal p-value: " + str(kolm_non_extremal[1])
         print >> outfile," "
         if len(differences) > 7:
             dagos = stats.normaltest(differences)
-            dagos_non_extremal = stats.normaltest(non_extremal_differences)
+            if len(non_extremal_indices) > 2:
+                dagos_non_extremal = stats.normaltest(non_extremal_differences)
             print >> outfile,"D'agostino-Pearson Results Method " + method + ":"
             print >> outfile,"(p > alpha significance level)"
             print >> outfile,"K2: " + str(dagos[0])
             print >> outfile,"p-value: " + str(dagos[1])
-            print >> outfile,"non-extremal K2: " + str(dagos_non_extremal[0])
-            print >> outfile,"non-extremal p-value: " + str(dagos_non_extremal[1])
+            if len(non_extremal_indices) > 2:
+                print >> outfile,"non-extremal K2: " + str(dagos_non_extremal[0])
+                print >> outfile,"non-extremal p-value: " + str(dagos_non_extremal[1])
             print >> outfile," "
         else:
             print >> outfile,"No D'agostino-Pearson method possible for method " + method
@@ -646,7 +806,10 @@ def Normality_tests(outfile,differences,method):
     else: # if python 3
         print("--------------------------------------------------------------------")
         print(" ")
-        print("Total sample size: " + str(len(differences)) + "  vs. non-extremal sample size: " + str(len(non_extremal_differences)) + " (" + str((len(non_extremal_differences)/(len(differences)*1.0))*100.) +"%)")
+        if len(non_extremal_indices) > 2:
+            print("Total sample size: " + str(len(differences)) + "  vs. non-extremal sample size: " + str(len(non_extremal_differences)) + " (" + str((len(non_extremal_differences)/(len(differences)*1.0))*100.) +"%)")
+        else:
+            print("Total sample size: " + str(len(differences)))          
         print(" ")
         print(" ")
         print("Mean - Median test (MM) ~ 0 with sigma ~ 0.76 s /sqrt(N) (s= sample stdev,N = sample size > 100) if normally distributed!")
@@ -654,20 +817,22 @@ def Normality_tests(outfile,differences,method):
         print("  Z1 < several sigma")
         print("MM: " + str(mean_med))
         print("Z1: " + str(Z_1))
-        print(" If Gaussian (non-extremal sample): MM ~ 0 +/- " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))) + " (95% confidence interval: " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")")
-        print("  Z1 < few sigma")
-        print("MM (non-extremal sample): " + str(mean_med_non_extremal))
-        print("Z1 (non-extremal sample): " + str(Z_1_non_extremal))
+        if len(non_extremal_indices) > 2:
+            print(" If Gaussian (non-extremal sample): MM ~ 0 +/- " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))) + " (95% confidence interval: " + str((0.76*stdev_differences_non_extremal)/np.sqrt(len(non_extremal_differences))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")")
+            print("  Z1 < few sigma")
+            print("MM (non-extremal sample): " + str(mean_med_non_extremal))
+            print("Z1 (non-extremal sample): " + str(Z_1_non_extremal))
         print(" ")
         print("Catastrophic outlier ratio (CAR) ~ 1 with sigma ~ 0.92/sqrt(N) (N = sample size > 100) if normally distributed!")
         print(" If Gaussian: CAR ~ 1 +/- " + str(0.92/np.sqrt(len(differences))) + " (95% confidence interval: " + str((0.92/np.sqrt(len(differences)))*stats.t.ppf((1.95) / 2., len(differences)-1)) + ")")
         print("  Z2 < few sigma")
         print("CAR:  " + str(catastrop_outlier_ratio))
         print("Z2: " + str(Z_2))
-        print(" If Gaussian: CAR (non-extremal sample) ~ 1 +/- " + str(0.92/np.sqrt(len(non_extremal_differences)))+ " (95% confidence interval: " + str((0.92/np.sqrt(len(non_extremal_differences)))*stats.t.ppf((1.95) / 2., len(non_extremal_differences)-1)) + ")")
-        print("  Z2 < several sigma")
-        print("CAR (non-extremal sample): " + str(catastrop_outlier_ratio_non_extremal))
-        print("Z2 (non-extremal sample): " + str(Z_2_non_extremal))
+        if len(non_extremal_indices) > 2:
+            print(" If Gaussian: CAR (non-extremal sample) ~ 1 +/- " + str(0.92/np.sqrt(len(non_extremal_differences)))+ " (95% confidence interval: " + str((0.92/np.sqrt(len(non_extremal_differences)))*stats.t.ppf((1.95) / 2., len(non_extremal_differences)-1)) + ")")
+            print("  Z2 < several sigma")
+            print("CAR (non-extremal sample): " + str(catastrop_outlier_ratio_non_extremal))
+            print("Z2 (non-extremal sample): " + str(Z_2_non_extremal))
         print(" ")
         print(" ")
         print("Typical Significance Level Alpha adopted = 0.05")
@@ -677,11 +842,13 @@ def Normality_tests(outfile,differences,method):
         print("(p > alpha significance level)")
         print("W-statistic: " + str(shap[0]))
         print("p-value: " + str(shap[1]))
-        print("non-extremal W-statistic: " + str(shap_non_extremal[0]))
-        print("non-extremal p-value: " + str(shap_non_extremal[1]))
+        if len(non_extremal_indices) > 2:
+            print("non-extremal W-statistic: " + str(shap_non_extremal[0]))
+            print("non-extremal p-value: " + str(shap_non_extremal[1]))
         print(" ")      
         ands = stats.anderson(differences,dist='norm')
-        ands_non_extremal = stats.anderson(non_extremal_differences,dist='norm')
+        if len(non_extremal_indices) > 2:
+            ands_non_extremal = stats.anderson(non_extremal_differences,dist='norm')
         print("Anderson-Darling Results Method " + method + ":")
         print("(A2 > Critical value to reject null hypothesis)")
         # If the returned statistic is larger than these critical values then for the corresponding significance level,
@@ -689,12 +856,14 @@ def Normality_tests(outfile,differences,method):
         print("A2: " + str(ands[0])) 
         print("Critical:" + str(ands[1]))
         print("Significance level:" + str(ands[2]))
-        print("non-extremal A2: " + str(ands_non_extremal[0]))
-        print("non-extremal Critical: " + str(ands_non_extremal[1]))
-        print("non-extremal Significance level: " + str(ands_non_extremal[2]))
+        if len(non_extremal_indices) > 2:
+            print("non-extremal A2: " + str(ands_non_extremal[0]))
+            print("non-extremal Critical: " + str(ands_non_extremal[1]))
+            print("non-extremal Significance level: " + str(ands_non_extremal[2]))
         print(" ")
         kolm = stats.kstest(differences, 'norm')
-        kolm_non_extremal = stats.kstest(non_extremal_differences, 'norm')
+        if len(non_extremal_indices) > 2:
+            kolm_non_extremal = stats.kstest(non_extremal_differences, 'norm')
         print("Kolmogorov-Smirnov Results Method " + method + ":")
         print("The hypothesis regarding the distributional form is rejected if the test statistic, D, is greater than the critical (p-)value. ")
         #This performs a test of the distribution G(x) of an observed random variable against a given distribution F(x). 
@@ -703,18 +872,21 @@ def Normality_tests(outfile,differences,method):
         #The KS test is only valid for continuous distributions.
         print("D: " +  str(kolm[0]))
         print("p-value: " + str(kolm[1]))
-        print("non-extremal D: " + str(kolm_non_extremal[0]))
-        print("non-extremal p-value: " + str(kolm_non_extremal[1]))
+        if len(non_extremal_indices) > 2:
+            print("non-extremal D: " + str(kolm_non_extremal[0]))
+            print("non-extremal p-value: " + str(kolm_non_extremal[1]))
         print(" ")
         if len(differences) > 7:
             dagos = stats.normaltest(differences)
-            dagos_non_extremal = stats.normaltest(non_extremal_differences)
+            if len(non_extremal_indices) > 2:
+                dagos_non_extremal = stats.normaltest(non_extremal_differences)
             print("D'agostino-Pearson Results Method " + method + ":")
             print("(p > alpha significance level)")
             print("K2: " + str(dagos[0]))
             print("p-value: " + str(dagos[1]))
-            print("non-extremal K2: " + str(dagos_non_extremal[0]))
-            print("non-extremal p-value: " + str(dagos_non_extremal[1]))
+            if len(non_extremal_indices) > 2:
+                print("non-extremal K2: " + str(dagos_non_extremal[0]))
+                print("non-extremal p-value: " + str(dagos_non_extremal[1]))
             print(" ")
         else:
             print("No D'agostino-Pearson method possible for method " + method)
@@ -1145,7 +1317,12 @@ def generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,dmat
 
 
 def fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,x_string,method,additional_method='',nonextremal=False):
-    markersize = 12 # plot markersize
+    if len(sorteddf[x_string].values) > 30:
+        markersize = 12 # change markersize
+    elif len(sorteddf[x_string].values) > 50:
+        markersize = 8 # change markersize
+    else:
+        markersize= 36 # default  
     # set the plotting style
     sns.set_style('darkgrid')
     if nonextremal:
@@ -1235,7 +1412,7 @@ def ODR_fit_plot(outfile,x_data,y_data,x_sigma,y_sigma,output,sigma_odr,residual
     # set plotting margin to 50 times the stepsize (beyond and before max and min, respectively)
     margin = 50*stepsize
     x_model = np.arange( min(x_data)-margin,max(x_data)+margin,
-                                    stepsize)
+                                    stepsize)    
     # plot the ODR fit
     fit.plot(x_data,y_data,'ro', x_model, f_ODR(output.beta,x_model),markersize=4,label='')
     # Add error bars
@@ -1321,7 +1498,7 @@ def ODR_fit_plot(outfile,x_data,y_data,x_sigma,y_sigma,output,sigma_odr,residual
    
     return
 
-def Bland_Altman_Krouwer_plot(outfile,df_plx,df_diff,df_e_diff,dmatrix,fit_res,predbound_up,predbound_down,robust_fit_res,odr_res,sigma_odr,residual_odr,non_extremal_dmatrix,non_extremal_fit_res,non_extremal_predbound_up,non_extremal_predbound_down,non_extremal_robust_fit_res,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,method1,method2=False,percent=False,logplot=False):
+def Bland_Altman_Krouwer_plot(outfile,df_plx,df_diff,df_e_diff,dmatrix,fit_res,predbound_up,predbound_down,robust_fit_res,odr_res,sigma_odr,residual_odr,method1,method2=False,percent=False,logplot=False,nonextremal=False):
     # using the Bland_Altman beta's and alfa's previously calculated, the Bland-Altman plot or the Krouwer plot is generated,
     # as well as returning limits of agreement, with their 95% confidence intervals.
 
@@ -1333,36 +1510,39 @@ def Bland_Altman_Krouwer_plot(outfile,df_plx,df_diff,df_e_diff,dmatrix,fit_res,p
     p = 0.95
     Critical_t = stats.t.ppf(p, degreesoffreedom-1)
 
-    if  isinstance(method2, basestring):        
-        # Generate the Tukey plot
-        difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Mean',percent=percent,logplot=logplot)        
-        # Make a sorted df containing the information needed for a fit plot
-        sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
-                                          dmatrix,predbound_up,predbound_down,odr_res,'Mean',method1,method2=method2)
-        # Make new figure showing the fits to the differences
-        fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Mean',method1,additional_method=method2)  
-        # Generate the (non-extremal) Tukey plot
-        difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Mean',percent=percent,logplot=logplot,non_extremal=True)        
-        # Make a sorted df containing the information needed for a fit plot (non-extremal)
-        non_extremal_sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,non_extremal_fit_res,non_extremal_robust_fit_res,
-                                          non_extremal_dmatrix,non_extremal_predbound_up,non_extremal_predbound_down,
-                                          non_extremal_odr_res,'Mean',method1,method2=method2,nonextremal=True)
-        # Make new figure showing the fits to the differences (non-extremal)
-        fit_plot(outfile,non_extremal_sorteddf,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,'Mean',method1,additional_method=method2,nonextremal=True)  
-
+    if  isinstance(method2, basestring):
+        if nonextremal:
+            # Generate the (non-extremal) Tukey plot
+            difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Mean',percent=percent,logplot=logplot,non_extremal=True)        
+            # Make a sorted df containing the information needed for a fit plot (non-extremal)
+            sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
+                                              dmatrix,predbound_up,predbound_down,
+                                              odr_res,'Mean',method1,method2=method2,nonextremal=True)
+            # Make new figure showing the fits to the differences (non-extremal)
+            fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Mean',method1,additional_method=method2,nonextremal=True)             
+        else:
+            # Generate the Tukey plot
+            difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Mean',percent=percent,logplot=logplot)        
+            # Make a sorted df containing the information needed for a fit plot
+            sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
+                                              dmatrix,predbound_up,predbound_down,odr_res,'Mean',method1,method2=method2)
+            # Make new figure showing the fits to the differences
+            fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Mean',method1,additional_method=method2)  
     else:
-        # Generate the Krouwer plot
-        difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Reference',percent=percent,logplot=logplot)        
-        # Make a sorted df containing the information needed for a fit plot
-        sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
-                                          dmatrix,predbound_up,predbound_down,odr_res,'Reference',method1)
-        # Make new figure showing the fits to the differences
-        fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Reference',method1)
-        # Generate the (non-extremal) Tukey plot
-        difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Reference',percent=percent,logplot=logplot,non_extremal=True)        
-        # Make a sorted df containing the information needed for a fit plot (non-extremal)
-        non_extremal_sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,non_extremal_fit_res,non_extremal_robust_fit_res,
-                                          non_extremal_dmatrix,non_extremal_predbound_up,non_extremal_predbound_down,non_extremal_odr_res,'Reference',method1,nonextremal=True)
-        # Make new figure showing the fits to the differences (non-extremal)
-        fit_plot(outfile,non_extremal_sorteddf,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,'Reference',method1,nonextremal=True)
+        if nonextremal:
+            # Generate the (non-extremal) Krouwer plot
+            difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Reference',percent=percent,logplot=logplot,non_extremal=True)        
+            # Make a sorted df containing the information needed for a fit plot (non-extremal)
+            sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
+                                              dmatrix,predbound_up,predbound_down,odr_res,'Reference',method1,nonextremal=True)
+            # Make new figure showing the fits to the differences (non-extremal)
+            fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Reference',method1,nonextremal=True)            
+        else:           
+            # Generate the Krouwer plot
+            difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,'Reference',percent=percent,logplot=logplot)        
+            # Make a sorted df containing the information needed for a fit plot
+            sorteddf = generate_sorted_df_fit(outfile,df_diff,df_e_diff,fit_res,robust_fit_res,
+                                              dmatrix,predbound_up,predbound_down,odr_res,'Reference',method1)
+            # Make new figure showing the fits to the differences
+            fit_plot(outfile,sorteddf,odr_res,sigma_odr,residual_odr,'Reference',method1)
     return 
