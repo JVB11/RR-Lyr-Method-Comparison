@@ -47,7 +47,7 @@ import matplotlib.pyplot as plt
 ###############################################################################
 
 #------------------------------------DATA INPUT--------------------------------
-# Indicate whether or not to use data from our dereddening script! (If True, you have to provide these down below!)
+# Indicate whether or not to use data from our dereddening script! (If True, you have to provide these down below! This can at the moment only be used together with the using_create_data and full_manual_input options)
 our_script = False
 
 # INDICATE HOW YOU WOULD LIKE TO PROVIDE DATA INPUT (one of these should be set to True)
@@ -67,11 +67,15 @@ first_relation = 'Sesar '
 second_relation = ''
 # SELECT FROM THE FOLLOWING LIST: 'Dambis V','Dambis Ks','Dambis W1','Klein Mv','Klein W1','Muraveva LMC','Muraveva plx','Neeley ','Sesar '
 
+# INDICATE IF YOU WANT TO SAVE YOUR CSV INPUT TO A LATEX TABLE & THE FILENAME OF THE FILE IN WHICH IT WILL BE SAVED (if True, automatically saves this in a LaTeX-format, in the file with the specified name)
+LaTeX_Table = True
+Type_mag_period_Fe_table = 'Type_mag_period_Fe_table.txt'
+
 # INDICATE WHAT YOU WOULD LIKE FOR METHOD COMPARISON OUTPUT: Passing-Bablok regression and/or Bland-Altman plots
-BLANDALTMAN = False # Bland-Altman or Tukey's mean difference and Krouwer plots
-outfile_BA = 'BA_results.txt' # specify name of file containing the printed outputs of Tukey_Bland_Altman_Krouwer.py
-PASSINGBABLOK = True # Passing Bablok regression plots
-outfile_PB = 'PB_results.txt' # specify name of file containing the printed outputs of Passing_Bablok.py
+BLANDALTMAN = True # Bland-Altman or Tukey's mean difference and Krouwer plots
+outfile_BA = 'BA_results_Sesar.txt' # specify name of file containing the printed outputs of Tukey_Bland_Altman_Krouwer.py
+PASSINGBABLOK = False # Passing Bablok regression plots
+outfile_PB = 'PB_results_Sesar.txt' # specify name of file containing the printed outputs of Passing_Bablok.py
 
 # indicate whether or not absolute values will be displayed on the Bland-Altman or Tukey's mean difference and Krouwer plots
 # IF BOTH percent_BA and log_BA = FALSE --> use absolute values; OTHERWISE set one of these to True! (Our personal experience: not recommended for this validation...)
@@ -91,7 +95,7 @@ print_BRR_RRAB = False
 
 #----------------------------------DUST TABLES---------------------------------
 # set the directory of the txt-file containing your output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
-Directory_EBV = '/Users/jvb/Documents/Proposal2018/Input_creation/'
+Directory_EBV = '~/Input_creation/'
 # filename of the txt-file containing output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
 filename_EBV = 'Dustmap_output_table.txt'
 #----------------------------------DUST TABLES---------------------------------
@@ -102,19 +106,19 @@ create_data_path = '/Users/jvb/Documents/Proposal2018/PassingBland/'
 # filename of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
 create_data_file = 'W_K_plx.dat'
 # set the directory of the txt-file containing input csv-file for general sample characterization
-csv_path = '/Users/jvb/Documents/Proposal2018/GAIA/'
+csv_path = '~/sample/'
 # filename of the txt-file containing input csv-file data for general sample characterization
 csv_filename = "RRL_Dambis2013.csv"
 # set the directory of the txt-file containing your output from create_data_Blazhko_csv.py (Blazhko variability)
-csv_path_blazhko = '/Users/jvb/Documents/Proposal2018/PassingBland/'
+csv_path_blazhko = '~/blazhko/'
 # filename of the txt-file containing output from create_data_Blazhko_csv.py (Blazhko variability)
 csv_filename_blazhko = "BLAZHKO_csv.dat"
 # set the directory of the txt-file containing your output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
-csv_Directory_EBV = '/Users/jvb/Documents/Proposal2018/Input_creation/'
+csv_Directory_EBV = '~/Input_creation/'
 # filename of the txt-file containing output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
 csv_filename_EBV = 'Dustmap_output_CSV_table.txt'
 # set the directory of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
-csv_path_GAIA = '/Users/jvb/Documents/Proposal2018/PassingBland/'
+csv_path_GAIA = '~/PassingBland/'
 # filename of the txt-file containing output from create_GAIA_data_csv.py (Blazhko variability)
 csv_filename_GAIA = ''W_K_plx.dat''
 #----------------------------------CSV INPUT-----------------------------------
@@ -264,14 +268,7 @@ if using_create_data:
 ############################USING CREATE DATA##################################
     
     
-#############################USING CSV INPUT###################################
-
 if using_csv_input:
-    
-    csv_path = '/Users/jvb/Documents/Proposal2018/GAIA/'
-    csv_filename = "RRL_Dambis2013.csv"
-    csv_path_blazhko = '/Users/jvb/Documents/Proposal2018/PassingBland/'
-    csv_filename_blazhko = "BLAZHKO_csv.dat"
 
     data_csv = pd.read_csv(csv_path+csv_filename)
     
@@ -299,8 +296,6 @@ if using_csv_input:
        
     #---------------------------------------------------------------------------------------
 
-    csv_path_blazhko = '/Users/jvb/Documents/Proposal2018/PassingBland/'
-    csv_filename_blazhko = "BLAZHKO_csv.dat"
     blazhko_data_csv = np.genfromtxt(csv_path_blazhko+csv_filename_blazhko,delimiter='\t',dtype=['S20','S20'],names=True)
     BRR = blazhko_data_csv["Blazhko"]
 
@@ -325,7 +320,7 @@ if using_csv_input:
     #---------------------------------------------------------------------------------------
 
     # Load the data from the .dat file created by create_GAIA_data.py
-    create_GAIA_output = np.genfromtxt('GAIA_DATA_csv.dat',delimiter='\t',names=True,dtype=['S20','f8','f8'])
+    create_GAIA_output = np.genfromtxt(csv_path_GAIA+csv_filename_GAIA,delimiter='\t',names=True,dtype=['S20','f8','f8'])
     
     # obtain slicing indices for the GAIA data based on whether or not a Blazhko type is identified
     ind_dict = dict((k,i) for i,k in enumerate(create_GAIA_output['Starname']))
@@ -348,6 +343,24 @@ if using_csv_input:
     stars = common_cols.values
     BRR = df.loc[["B/RR","RRAB/RRC"]].values[0]
     RRABC = df.loc[["B/RR","RRAB/RRC"]].values[1]
+    
+    #---------------------------------------------------------------------------------------
+
+    if LaTeX_Table:
+        # Save as LateX table
+        df.loc["uVmag"] = unumpy.uarray(df.loc["Vmag"].values,df.loc["e_Vmag"].values) #contains all retrieved Visual (Johnson J) apparent magnitudes
+        df.loc["uKsmag"] = unumpy.uarray(df.loc["Ksmag"].values,df.loc["e_Ksmag"].values) #contains all retrieved 2MASS Ks apparent magnitudes
+        df.loc["uW1mag"] = unumpy.uarray(df.loc["W1mag"].values,df.loc["e_W1mag"].values) #contains all retrieved AllWise W1 apparent magnitudes
+        df.loc["GAIA_plx"] = uGAIAparallaxes
+        latextable = df.T.to_latex(buf=None, columns=["P","Fe","B/RR","RRAB/RRC","uVmag","uKsmag","uW1mag","GAIA_plx"],
+                                   col_space=None, header=True, index=True,
+                       na_rep='NaN', formatters=None, float_format=None, sparsify=None,
+                       index_names=True, bold_rows=False, column_format=None, longtable=True,
+                       escape=None, encoding=None, decimal='.', multicolumn=None,
+                       multicolumn_format=None, multirow=None)
+        with open(Type_mag_period_Fe_table, 'w') as latex_f:
+            print >> latex_f,latextable
+
 
     #---------------------------------------------------------------------------------------
     
@@ -360,13 +373,7 @@ if using_csv_input:
     # Make sure df columns are sorted in correct way
     m_df = m_df.reindex(columns=stars)
     
-    #---------------------------------------------------------------------------------------
-    
-    # set the directory of the txt-file containing your output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
-    csv_Directory_EBV = '/Users/jvb/Documents/Proposal2018/Input_creation/'
-    # filename of the txt-file containing output from NASA/IPAC  INFRARED  SCIENCE  ARCHIVE Galactic Dust Reddening and Extinction 'query'
-    csv_filename_EBV = 'Dustmap_output_CSV_table.txt'
- 
+    #--------------------------------------------------------------------------------------- 
     
     # read in the (IPAC-table format) txt-file containing interstellar reddening information from DUST TABLES
     EBV_data = ascii.read(csv_Directory_EBV+csv_filename_EBV)
