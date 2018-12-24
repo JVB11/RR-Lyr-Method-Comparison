@@ -13,7 +13,7 @@
 # Bland & Altman, Statistical Methods for Assessing Agreement between two Methods, 327(8476), pp. 307-310, 1986
 # http://www.sciencedirect.com/science/article/pii/S0140673686908378
 
-# FOR NORMALITY TESTS: see figure 4.7 in
+# FOR NORMALITY & OUTLIER TESTS: see figure 4.7 in
 # Ivezic et al., Statistics, Data Mining, and Machine Learning in Astronomy, Princeton University Press, 2014
 # http://www.astroml.org/book_figures/chapter4/fig_anderson_darling.html
 
@@ -80,36 +80,37 @@ def generate_fit_models(nom,err,x_variable,weighted,nonextremal=False):
     if nonextremal:
         # non-extremal differences: avoiding outliers!
         non_extremal_indices = np.argwhere((nom['Difference'].values < 1.) & (nom['Difference'].values > -1.)).flatten() # exclude any differences above 1.0 or below -1.0
-        non_extremal_nom = nom.iloc[non_extremal_indices]
-        non_extremal_err = err.iloc[non_extremal_indices]
-        # generate design matrix for fit using Patsy
-        non_extremal_y,non_extremal_X = dmatrices('Difference ~ ' + str(x_variable) , data=non_extremal_nom, return_type='dataframe')
-        # generate a weighted or unweighted linear least squares model using Statsmodels
-        if weighted:
-            non_extremal_mod = sm.WLS(non_extremal_y,non_extremal_X,weights=1./(non_extremal_err['Difference']**2 + non_extremal_err[str(x_variable)]**2)**(1./2.))
-        else:
-            non_extremal_mod = sm.OLS(non_extremal_y,non_extremal_X)
-            # generate a robust fitting model that punishes outliers, using the Huber loss function
-        non_extremal_RLM_mod = sm.RLM(non_extremal_y,non_extremal_X,M=sm.robust.norms.HuberT())
-        # generate data format for ODR
-        non_extremal_ODR_data = odr.Data(non_extremal_nom[x_variable].values, non_extremal_nom['Difference'].values, 
-                            wd=1./np.power(non_extremal_err[x_variable].values,2), 
-                            we=1./np.power(non_extremal_err['Difference'].values,2))
-        # generate an orthogonal distance fitting model (Deming regression)
-        non_extremal_ODR_mod = odr.Model(f_ODR)
-        # instantiate ODR with data, model and initial parameter estimate
-        non_extremal_odr_mod = odr.ODR(non_extremal_ODR_data, non_extremal_ODR_mod, beta0=[0., 0.]) # initial estimate = 0 * X + 0 = no difference!
-        # generate the fit results
-        non_extremal_res = non_extremal_mod.fit()
-        non_extremal_RLM_res = non_extremal_RLM_mod.fit()
-        non_extremal_odr_res = non_extremal_odr_mod.run()
-        # generate residuals and corresponding errors on the residual, to be used in ODR fit plot
-        non_extremal_residual_odr,non_extremal_sigma_odr = calc_residual_sigma_odr(non_extremal_odr_res,non_extremal_nom[x_variable].values,
-                                                         non_extremal_nom['Difference'].values,
-                                                         non_extremal_err[x_variable].values,
-                                                         non_extremal_err['Difference'].values)
-        # generate the confidence bands of the (non-)weighted model
-        non_extremal_prstd, non_extremal_iv_l, non_extremal_iv_u = wls_prediction_std(non_extremal_res)   
+        if len(non_extremal_indices) > 2:
+            non_extremal_nom = nom.iloc[non_extremal_indices]
+            non_extremal_err = err.iloc[non_extremal_indices]
+            # generate design matrix for fit using Patsy
+            non_extremal_y,non_extremal_X = dmatrices('Difference ~ ' + str(x_variable) , data=non_extremal_nom, return_type='dataframe')
+            # generate a weighted or unweighted linear least squares model using Statsmodels
+            if weighted:
+                non_extremal_mod = sm.WLS(non_extremal_y,non_extremal_X,weights=1./(non_extremal_err['Difference']**2 + non_extremal_err[str(x_variable)]**2)**(1./2.))
+            else:
+                non_extremal_mod = sm.OLS(non_extremal_y,non_extremal_X)
+                # generate a robust fitting model that punishes outliers, using the Huber loss function
+            non_extremal_RLM_mod = sm.RLM(non_extremal_y,non_extremal_X,M=sm.robust.norms.HuberT())
+            # generate data format for ODR
+            non_extremal_ODR_data = odr.Data(non_extremal_nom[x_variable].values, non_extremal_nom['Difference'].values, 
+                                wd=1./np.power(non_extremal_err[x_variable].values,2), 
+                                we=1./np.power(non_extremal_err['Difference'].values,2))
+            # generate an orthogonal distance fitting model (Deming regression)
+            non_extremal_ODR_mod = odr.Model(f_ODR)
+            # instantiate ODR with data, model and initial parameter estimate
+            non_extremal_odr_mod = odr.ODR(non_extremal_ODR_data, non_extremal_ODR_mod, beta0=[0., 0.]) # initial estimate = 0 * X + 0 = no difference!
+            # generate the fit results
+            non_extremal_res = non_extremal_mod.fit()
+            non_extremal_RLM_res = non_extremal_RLM_mod.fit()
+            non_extremal_odr_res = non_extremal_odr_mod.run()
+            # generate residuals and corresponding errors on the residual, to be used in ODR fit plot
+            non_extremal_residual_odr,non_extremal_sigma_odr = calc_residual_sigma_odr(non_extremal_odr_res,non_extremal_nom[x_variable].values,
+                                                             non_extremal_nom['Difference'].values,
+                                                             non_extremal_err[x_variable].values,
+                                                             non_extremal_err['Difference'].values)
+            # generate the confidence bands of the (non-)weighted model
+            non_extremal_prstd, non_extremal_iv_l, non_extremal_iv_u = wls_prediction_std(non_extremal_res)   
 
 
     # generate design matrix for fit using Patsy
@@ -133,8 +134,6 @@ def generate_fit_models(nom,err,x_variable,weighted,nonextremal=False):
     res = mod.fit()
     RLM_res = RLM_mod.fit()
     odr_res = odr_mod.run()
-    # Generate a printout of the ODR results (commented out for now)
-    # odr_res.pprint()
     # generate residuals and corresponding errors on the residual, to be used in ODR fit plot
     residual_odr,sigma_odr = calc_residual_sigma_odr(odr_res,nom[x_variable].values,
                                                      nom['Difference'].values,
@@ -144,7 +143,10 @@ def generate_fit_models(nom,err,x_variable,weighted,nonextremal=False):
     prstd, iv_l, iv_u = wls_prediction_std(res)  
     
     if nonextremal:
-        return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr
+        if len(non_extremal_indices) > 2:
+            return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr,non_extremal_X,non_extremal_res,non_extremal_mod,non_extremal_RLM_res,non_extremal_RLM_mod,non_extremal_iv_u,non_extremal_iv_l,non_extremal_odr_res,non_extremal_residual_odr,non_extremal_sigma_odr
+        else:
+            return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr           
     else:
         return X,res,mod,RLM_res,RLM_mod,iv_u,iv_l,odr_res,residual_odr,sigma_odr
 
@@ -170,7 +172,16 @@ def calc_residual_sigma_odr(output,x_data,y_data,x_sigma,y_sigma):
                   * np.sqrt(delta**2 + epsilon**2) )
     return residual_odr,sigma_odr
 
-
+def Bland_Altman_main(plx_df,method1,method2,our_script,outfile,weighted = True, percent=False, logplot=False):
+    # loads in the parallax dataframe in order to obtain parameters for
+    # a Tukey mean-difference plot (also called a Bland-Altman plot), or Krouwer plot,
+    # in order to better compare the different methods
+    
+    # generate list of stars  
+    stars = list(plx_df)
+    # generate list of methods
+    methods = list(plx_df.index)
+    
     # if using our dereddening script as well
     if our_script:
         # double PML method comparison = 3 + 3 + 1 + 1 rows
@@ -454,7 +465,7 @@ def calc_residual_sigma_odr(output,x_data,y_data,x_sigma,y_sigma):
             with open(outfile, 'w') as f:
                 for i in range(2):
                     # obtain method name (distinction between dereddening)
-                    methodname = methods[i]
+                    methodname = methods[i]                  
                     # beta = differences of parallaxes, alfa = means of parallaxes, alfa_Krouwer = gaia parallax
                     beta = pd.DataFrame(plx_df.loc['GAIA'].values - plx_df.iloc[i].values, index=stars,columns=['Difference']) # GAIA - PML
                     alfa_Krouwer = pd.DataFrame(plx_df.loc['GAIA'].values, index=stars,columns=['Reference'])
@@ -528,7 +539,7 @@ def calc_residual_sigma_odr(output,x_data,y_data,x_sigma,y_sigma):
                                                           non_extremal_residual_odr_K,
                                                           methodname,percent=percent,logplot=logplot,nonextremal=True)
                             Bland_Altman_Krouwer_plot(f,plx_df,nom,err,non_extremal_X,non_extremal_res,non_extremal_iv_u,non_extremal_iv_l,
-                                                      non_extremal_RLM_res,non_extremal_odr_res,non_extremal_sigma_odr,residual_odr,
+                                                      non_extremal_RLM_res,non_extremal_odr_res,non_extremal_sigma_odr,non_extremal_residual_odr,
                                                       methodname,method2=method2,percent=percent,logplot=logplot,nonextremal=True)
 
                         else:
@@ -617,13 +628,13 @@ def Normality_histogram(differences,method1,method2='GAIA Reference'):
     # (Need normality in this parameter in order to use the prediction/confidence intervals, as well as limits of agreement! See Bland-Altman publications mentioned on top.)
     sns.set_style('darkgrid')
     plt.figure()
-    sns.distplot(differences) # histogram + Kernel Density estimation ("KDE")
-    sns.distplot(differences,fit=norm,kde=False) # histogram (overlay) + normal distribution fit ("Norm")
+    sns.distplot(differences,norm_hist=True) # histogram + Kernel Density estimation ("KDE")
+    sns.distplot(differences,fit=norm,kde=False,norm_hist=True) # histogram (overlay) + normal distribution fit ("Norm")
     # plot an estimate of the normal distribution without extremal values 
     # (as the distribution fit is affected significantly by those)
     non_extremal_indices = np.argwhere((differences < 1.) & (differences > -1.)).flatten() # exclude any differences above 1.5 or below -1.5
     if len(non_extremal_indices) > 2:
-        sns.distplot(differences[non_extremal_indices],fit=norm,kde=False,hist=False,fit_kws={"color":"red"})
+        sns.distplot(differences[non_extremal_indices],fit=norm,kde=False,hist=False,fit_kws={"color":"red"},norm_hist=True)
         Legend = plt.legend(['Norm','Norm non-extremal', 'KDE'],loc='upper left', frameon=True, fancybox=True, framealpha=1.0)
     else:
         Legend = plt.legend(['Norm', 'KDE'],loc='upper left', frameon=True, fancybox=True, framealpha=1.0)        
@@ -788,15 +799,17 @@ def Normality_tests(outfile,differences,method):
         print >> outfile," "
         if len(differences) > 7:
             dagos = stats.normaltest(differences)
-            if len(non_extremal_indices) > 2:
+            if len(non_extremal_indices) > 7:
                 dagos_non_extremal = stats.normaltest(non_extremal_differences)
             print >> outfile,"D'agostino-Pearson Results Method " + method + ":"
             print >> outfile,"(p > alpha significance level)"
             print >> outfile,"K2: " + str(dagos[0])
             print >> outfile,"p-value: " + str(dagos[1])
-            if len(non_extremal_indices) > 2:
+            if len(non_extremal_indices) > 7:
                 print >> outfile,"non-extremal K2: " + str(dagos_non_extremal[0])
                 print >> outfile,"non-extremal p-value: " + str(dagos_non_extremal[1])
+            else:
+                print >> outfile,"No D'agostino-Pearson method possible for (non-extremal) method " + method
             print >> outfile," "
         else:
             print >> outfile,"No D'agostino-Pearson method possible for method " + method
@@ -878,15 +891,17 @@ def Normality_tests(outfile,differences,method):
         print(" ")
         if len(differences) > 7:
             dagos = stats.normaltest(differences)
-            if len(non_extremal_indices) > 2:
+            if len(non_extremal_indices) > 7:
                 dagos_non_extremal = stats.normaltest(non_extremal_differences)
             print("D'agostino-Pearson Results Method " + method + ":")
             print("(p > alpha significance level)")
             print("K2: " + str(dagos[0]))
             print("p-value: " + str(dagos[1]))
-            if len(non_extremal_indices) > 2:
+            if len(non_extremal_indices) > 7:
                 print("non-extremal K2: " + str(dagos_non_extremal[0]))
                 print("non-extremal p-value: " + str(dagos_non_extremal[1]))
+            else:
+                print("No D'agostino-Pearson method possible for (non-extremal) method " + method)
             print(" ")
         else:
             print("No D'agostino-Pearson method possible for method " + method)
@@ -894,6 +909,7 @@ def Normality_tests(outfile,differences,method):
         print("--------------------------------------------------------------------")
     
     return
+
 
 def difference_plot(outfile,df_diff,df_e_diff,method1,method2,degreesoffreedom,Critical_t,x_string,percent=False,logplot=False,non_extremal=False):
     plt.figure()
