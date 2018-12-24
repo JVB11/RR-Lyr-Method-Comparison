@@ -1,6 +1,8 @@
 # RR-Lyr-Method-Comparison
 
-The    software    package    we    developed for   period-metallicity-luminosity (PML) relation (of RR Lyrae pulsators) validation   purposes   consists   of   several   independently   working    python    scripts    (as    well    as    some    necessary    modules).   It  should  easily  be  extendable to other PML relations/approaches (for example Period-Wesenheit relations). The main script works in python 2.7, whereas the query scripts have been tested/used in 3.6. Future work includes updating the main script to work in 3.6 as well...
+The    software    package    we    developed for   period-metallicity-luminosity (PML) relation (of RR Lyrae pulsators) validation   purposes   consists   of   several   independently   working    python    scripts    (as    well    as    some    necessary    modules).   It  should  easily  be  extendable to other PML relations/approaches (for example Period-Wesenheit relations). The main PML validation script works in python 2.7, whereas the query scripts have been tested/used in 3.6. Future work includes updating the main script to work in 3.6 as well...
+
+Additionally, we provide the user with a spectrum normalization and spectral analysis script, that allow the user to determine the fundamental parameters of their RR Lyrae pulsators (or other stars in general). These fundamental parameters can then be used for the PML validation.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2525576.svg)](https://doi.org/10.5281/zenodo.2525576)
 
@@ -30,3 +32,9 @@ Two different scripts are provided that allow the user to generate the necessary
 The  'Dusttable.py'  script  provides  the user with a means to efficiently query the NASA/IPAC Galactic Dust  Reddening  and  Extinction  tool (https://irsa.ipac.caltech.edu/applications/DUST/),  by  creating  a  file  called ‘sample.csv’  or  ‘sample_CSV.csv’  depending  on  whether  the user wants to obtain information on their manually defined sample (our predefined sample) or the csv-file containing their sample (e.g. the Dambis et  al.  (2013)  sample that we used to test our software package).  This  file  can  then  easily  be  uploaded to  the  tool,  which  subsequently  provides  you  with  the  necessary  attenuation  information,  which  should  be  saved  in  a  file  called ‘Dustmap_output_CSV_table.txt’, in order to be read in by the main script (although this name can easily be changed).
 ## Monte Carlo attenuation
 The dereddening.py script takes photometric data obtained from VizieR in a votable format and calculates the interstellar attenuation/reddening with robust uncertainty estimates based on a monte carlo approach. Care has to be taken when selecting the actual data(set) used, as outliers might be present in the downloaded votable.
+
+# Spectral Analysis & Normalization
+## Spectral Normalization
+The 'specnorm_automized.py' script allows the user to normalize their spectra. It requires the spectra to be in the fits-file format.
+## Spectral Analysis
+The 'GSSP_fund_param_est.py' script provides the user with a estimate on the fundamental parameters of the targets, based on output from the Grid Search in Stellar Parameters (GSSP) software package (Tkachenko, 2015).
