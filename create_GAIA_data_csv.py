@@ -32,7 +32,7 @@ import sys
 # Allows the user to specify the name under which the file is saved (IF CHANGED, has to be updated in main script!)
 savename = "GAIA_DATA_csv.dat"
 # Specify path + filenames for all necessary files:
-csv_path = '~/Documents/GAIA/' # folder in which both csv-files exist
+csv_path = '~/GAIA/' # folder in which both csv-files exist
 csv_gaia_id = "Xmatch.csv" # cross-match csv
 csv_filename = "RRL.csv" # csv containing information mentioned above
 #-------------------------------------------------------
