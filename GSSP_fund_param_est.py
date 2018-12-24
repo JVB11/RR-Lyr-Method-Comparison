@@ -1,7 +1,31 @@
-# Written for Python 2.7/3.7 ----> HAVE TO CHECK
+## coding: utf-8 
+#!/usr/bin/env python2/3
+#
+# File: GSSP_fund_param_est.py
+# Author: Jordan Van Beeck <jordan.vanbeeck@student.kuleuven.be>
 
-# Script that allows you to do Fundamental Parameter estimation by fitting these parameters (using the polynomial you choose) from the Chi-squared distribution obtained as output from GSSP (i.e. the Chi-squared table.dat)
+# Description: Script that allows you to do Fundamental Parameter estimation by fitting these parameters 
+# (using the polynomial you choose) from the Chi-squared distribution obtained as output from 
+# the Grid Search in Stellar Parameters (GSSP) software package (i.e. the Chi-squared table.dat file)
 
+# Publications of interest:
+# GSSP package (Tkachenko 2015, A&A, 581, A129) 
+# SynthV introduction paper (Tsymbal 1996, ASPC, 108, 198)
+
+#   Copyright 2018 Jordan Van Beeck
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+# 
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -276,25 +300,11 @@ def printresults(allresults,allresultsmin,allresultsplus,parameters):
 #                                       Main Script                                            #
 ################################################################################################
 
-# Running the script on my IvS computer!
-            
-# Initial set-up: object names, folder containing chi2 tables
-
-star_name_array = ['SW_AND','SW_AND_rough','V1057_Cas_rough'] # Change names of folder containing chi2 tables of stars
-
-Directory_chi2 = '/home/jordanv/Observational_school_data_analysis/GSSP_single_v1.1/output_files/' # Name of folder in which chi2-tables are located ----> can either be relative or full path
-
-
-# Running the script on my local computer!
-
 star_name_array = ['XZ_Dra'] # Change names of folders containing chi2 tables of stars
 
-Directory_chi2 = '/Users/jvb/Documents/Proposal2018/GSSP/' # Name of folder in which chi2-tables are located ----> can either be relative or full path
+Directory_chi2 = '~/GSSP/' # Name of folder in which chi2-tables are located ----> can either be relative or full path
 
-# plot (non-)weighted fits, and calculate the fundamental parameter estimates with their 1 sigma error estimates    
-
-
-#       
+# plot (non-)weighted fits, and calculate the fundamental parameter estimates with their 1 sigma error estimates          
 
 # parameters,polydegree,fitplot,weights,averaging,parmin=False,within_bounds=False,weight_power = -1.,param_in_bound=False,likelihood=True
 allresults,allresultsmin,allresultsplus,parameters = get_plot_fundamental_parameters(["Metallicity","Teff","log_g","Microturbulent_velocity","v_sin_i"],2,True,True,False,within_bounds=False,param_in_bound=False,weight_power = -1.)
