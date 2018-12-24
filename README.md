@@ -4,7 +4,7 @@ The    software    package    we    developed for   period-metallicity-luminosit
 
 Additionally, we provide the user with a spectrum normalization and spectral analysis script, that allow the user to determine the fundamental parameters of their RR Lyrae pulsators (or other stars in general). These fundamental parameters can then be used for the PML validation.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2525576.svg)](https://doi.org/10.5281/zenodo.2525576)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2525594.svg)](https://doi.org/10.5281/zenodo.2525594)
 
 # PML validation script:
 The 'main_method_comp_script.py' script, referred to as the main PML validation/comparison script in following sections, makes use of several python modules to allow the user to assess the agreement between the GAIA and PML parallaxes. It has several functionalities to gain more insight on the sample you have selected, by allowing the user to print out several characteristics (e.g. the inferred distances to the stars, according to the PML relations). Moreover, the user should specify the options he/she wants, for the analysis of the agreement of the PML relations in the script itself (a parser interface has yet to be developed, although this might not be ideal, given the amount of options provided to the user). 
