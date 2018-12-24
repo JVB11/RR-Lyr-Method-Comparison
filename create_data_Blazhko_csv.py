@@ -29,7 +29,7 @@ import numpy as np
 # Specify the name of the saved file:
 Savedfilename = 'BLAZHKO_csv.dat'
 # Specify the paths of files needed to generate saved file:
-csv_path = '~/Documents/GAIA/'
+csv_path = '~/GAIA/'
 csv_gaia_id = "Xmatch.csv"
 csv_filename = "RRL.csv"
 #----------------------------------------------------------------------
