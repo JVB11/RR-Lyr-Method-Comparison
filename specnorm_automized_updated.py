@@ -1,4 +1,25 @@
-#!/usr/bin/env python
+## coding: utf-8
+#!/usr/bin/env python2/3
+#
+# File: specnorm_automized_updated.py
+# Author: Sven Nys <sven.nys@student.kuleuven.be>
+
+# Description: Normalization script used for the normalization of spectra.
+
+#   Copyright 2018 Sven Nys
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 import sys
 import os
 import optparse
@@ -21,30 +42,15 @@ Object number + _HRF_OBJ_ext_CosmicsRemoved_log_merged_cf
 
 '''
 '''
-Changed: 
--read in file
--solved error of left clicking out of axes
--created a q button to quit
--no nans
--save points at any given time: press o
--read in points at any given time: press i
--corrects for rv
--merge n specs
--s/n
--added distinction for log or wavelength files
-'''
-
-
-'''
-ObjectName	HERMESnr	
-SW And  	  897623 
-RU Psc  	  898140  
-XZ Dra  	  897736 
-BD+184995		898416 
-V1057Cas    897755 
-X Ari  	  897757 
-SV Eri  	  897758 
-RZ Cep  	  897863 
+ObjectName		
+SW And  	  
+RU Psc  	  
+XZ Dra  	  
+BD+184995		
+V1057Cas   
+X Ari  	  
+SV Eri  	  
+RZ Cep  	 
 '''
 
 # from http://python4esac.github.io/plotting/specnorm.html
