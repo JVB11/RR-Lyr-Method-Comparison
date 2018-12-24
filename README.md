@@ -2,6 +2,17 @@
 
 The    software    package    we    developed for   period-metallicity-luminosity (PML) relation (of RR Lyrae pulsators) validation   purposes   consists   of   several   independently   working    python    scripts    (as    well    as    some    necessary    modules).   It  should  easily  be  extend-able to other PML relations/approaches (such as for example Period-Wesenheit relations).
 
+# PML validation script:
+The 'main_method_comp_script.py' script, referred to as the main PML validation/comparison script in following sections, makes use of several python modules to allow the user to assess the agreement between the GAIA and PML parallaxes.
+## PML relation module
+The 'PML_relations.py' module contains the definitions of the PML relations whose agreement is tested. When used in the main script, it provides absolute magnitudes, given the required inputs for the PML relation. This should be refined when using other samples.
+## PML parallax module
+The 'Distance_Parallax.py' module contains the necessary definitions (distance modulus equation) to calculate the distances and parallaxes for the PML relations, taking into account interstellar attenuation. When used in the main script, it provides the PML parallaxes (and can provide explicit distances).
+## Tukey's mean difference/Bland-Altman & Krouwer module
+The‘Tukey_Bland_Altman_Krouwer.py’   module   (when   used   in the  main  script)  generates  the  Tukey  mean  difference/Bland-Altman (BA) plots, as well as the Krouwer plots. In the former the parallax differences are parametrized in function of the mean of the GAIA (DR2) parallax and the PML parallax. In the latter they are parametrized in function of the GAIA (DR2) parallax. On  top  of  that  they  generate  different  plots  that  contain different  inferences  of  possible  biases,  by  means  of  linear regression techniques (as well as their regression diagnostics), and provide one with the results (printed to a file) of the different statistical tests used to verify the assumption that the differences are normally distributed (a necessary assumption when making use of BA/Krouwer plots).
+## Passing-Bablok module
+The   ‘Passing_Bablok.py’ module provides our implementation of the Passing-Bablok regression procedure (in python) used  for  PML  validation. When  used  in  the  main script, it generates the different plots needed to analyze agreement, prints the necessary information for the user to a file, and tests the hypotheses β = 1 & α = 0 (needed if both relations agree, given that the cusum tests does not fail). If both (null) hypotheses are valid, we expect 95\% of the data points to lie within the  confidence interval.
+
 # Query scripts:
 Several query scripts based on the Astroquery python package (Ginsburg et al. 2018) were developed in order to easily extract data from the VizieR database (Ochsenbein  et  al.  2000) that will be used in the PML relation validation.
 ## Blazhko Variability Query
@@ -17,15 +28,3 @@ Two different scripts are provided that allow the user to generate the necessary
 The  'Dusttable.py'  script  provides  the user with a means to efficiently query the NASA/IPAC Galactic Dust  Reddening  and  Extinction  tool (https://irsa.ipac.caltech.edu/applications/DUST/),  by  creating  a  file  called ‘sample.csv’  or  ‘sample_CSV.csv’  depending  on  whether  the user wants to obtain information on their manually defined sample (our predefined sample) or the csv-file containing their sample (e.g. the Dambis et  al.  (2013)  sample).  This  file  can  then  easily  be  uploaded to  the  tool,  which  subsequently  provides  you  with  the  necessary  attenuation  information,  which  should  be  saved  in  a  file  called ‘Dustmap_output_CSV_table.txt’, in order to be read in by the main script (although this name can easily be changed).
 ## Monte Carlo attenuation
 The dereddening.py script takes photometric data obtained from VizieR in a votable format and calculates the interstellar attenuation/reddening with robust uncertainty estimates based on a monte carlo approach. Care has to be taken when selecting the actual data(set) used, as outliers might be present in the downloaded votable.
-
-# PML validation script:
-The 'main_method_comp_script.py' script, referred to as the main PML validation/comparison script in following sections, makes use of several python modules to allow the user to assess the agreement between the GAIA and PML parallaxes.
-## PML relation module
-The 'PML_relations.py' module contains the definitions of the PML relations whose agreement is tested. When used in the main script, it provides absolute magnitudes, given the required inputs for the PML relation. This should be refined when using other samples.
-## PML parallax module
-The 'Distance_Parallax.py' module contains the necessary definitions (distance modulus equation) to calculate the distances and parallaxes for the PML relations, taking into account interstellar attenuation. When used in the main script, it provides the PML parallaxes (and can provide explicit distances).
-## Tukey's mean difference/Bland-Altman & Krouwer module
-The‘Tukey_Bland_Altman_Krouwer.py’   module   (when   used   in the  main  script)  generates  the  Tukey  mean  difference/Bland-Altman (BA) plots, as well as the Krouwer plots. In the former the parallax differences are parametrized in function of the mean of the GAIA (DR2) parallax and the PML parallax. In the latter they are parametrized in function of the GAIA (DR2) parallax. On  top  of  that  they  generate  different  plots  that  contain different  inferences  of  possible  biases,  by  means  of  linear regression techniques (as well as their regression diagnostics), and provide one with the results (printed to a file) of the different statistical tests used to verify the assumption that the differences are normally distributed (a necessary assumption when making use of BA/Krouwer plots).
-## Passing-Bablok module
-The   ‘Passing_Bablok.py’ module provides our implementation of the Passing-Bablok regression procedure (in python) used  for  PML  validation. When  used  in  the  main script, it generates the different plots needed to analyze agreement, prints the necessary information for the user to a file, and tests the hypotheses β = 1 & α = 0 (needed if both relations agree, given that the cusum tests does not fail). If both (null) hypotheses are valid, we expect 95\% of the data points to lie within the  confidence interval.
-
