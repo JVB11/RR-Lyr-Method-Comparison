@@ -6,7 +6,6 @@ Additionally, we provide the user with a spectrum normalization and spectral ana
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2525594.svg)](https://doi.org/10.5281/zenodo.2525594)
 
-
 # PML validation script:
 The 'main_method_comp_script.py' script, referred to as the main PML validation/comparison script in following sections, makes use of several python modules to allow the user to assess the agreement between the GAIA and PML parallaxes. It has several functionalities to gain more insight on the sample you have selected, by allowing the user to print out several characteristics (e.g. the inferred distances to the stars, according to the PML relations). Moreover, the user should specify the options he/she wants, for the analysis of the agreement of the PML relations in the script itself (a parser interface has yet to be developed, although this might not be ideal, given the amount of options provided to the user). 
 ## PML relation module
